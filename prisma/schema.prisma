@@ -1,0 +1,328 @@
+// Auton Database Schema
+// This defines all tables and relationships for the Auton platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ORGANIZATIONS & USERS
+// ============================================================================
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  kycStatus String   @default("pending") @map("kyc_status") // pending, approved, rejected
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users       User[]
+  apiKeys     ApiKey[]
+  agents      Agent[]
+  rules       SpendingRule[]
+  transactions Transaction[]
+  webhooks    Webhook[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  role           String   @default("member") // owner, admin, member
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  approvalActions ApprovalAction[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model ApiKey {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  keyHash        String    @map("key_hash") // Hashed API key
+  name           String?
+  lastUsedAt     DateTime? @map("last_used_at")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// AI AGENTS
+// ============================================================================
+
+model Agent {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  walletAddress  String?  @map("wallet_address")
+  status         String   @default("active") // active, paused, deleted
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rules        SpendingRule[]
+  transactions Transaction[]
+  balance      AgentBalance?
+
+  @@index([organizationId])
+  @@index([walletAddress])
+  @@index([status])
+  @@map("agents")
+}
+
+model AgentBalance {
+  agentId       String   @id @map("agent_id")
+  balanceUsd    Decimal  @default(0) @map("balance_usd") @db.Decimal(20, 6)
+  balanceUsdc   Decimal  @default(0) @map("balance_usdc") @db.Decimal(20, 6)
+  pendingUsd    Decimal  @default(0) @map("pending_usd") @db.Decimal(20, 6)
+  lastUpdatedAt DateTime @default(now()) @map("last_updated_at")
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_balances")
+}
+
+// ============================================================================
+// SPENDING RULES
+// ============================================================================
+
+model SpendingRule {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  agentId        String?  @map("agent_id") // null = org-wide rule
+  ruleType       String   @map("rule_type") // per_transaction, daily, weekly, monthly, category, velocity, etc.
+  limitAmount    Decimal? @map("limit_amount") @db.Decimal(20, 6)
+  limitCurrency  String   @default("USD") @map("limit_currency")
+  timeWindow     String?  @map("time_window") // hourly, daily, weekly, monthly
+  category       String?
+  conditions     Json     @default("{}") // Flexible JSON for complex conditions
+  priority       Int      @default(100)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([agentId])
+  @@index([enabled])
+  @@map("spending_rules")
+}
+
+// ============================================================================
+// TRANSACTIONS
+// ============================================================================
+
+model Transaction {
+  id                String    @id @default(uuid())
+  organizationId    String    @map("organization_id")
+  agentId           String    @map("agent_id")
+  amount            Decimal   @db.Decimal(20, 6)
+  currency          String    @default("USD")
+  merchantId        String?   @map("merchant_id")
+  merchantName      String?   @map("merchant_name")
+  category          String?
+  status            String    @default("pending") // pending, pending_approval, processing, completed, failed, rejected
+  paymentMethod     String    @map("payment_method") // onchain, card
+  blockchainTxHash  String?   @map("blockchain_tx_hash")
+  blockchainNetwork String?   @default("base-mainnet") @map("blockchain_network")
+  fromAddress       String?   @map("from_address")
+  toAddress         String?   @map("to_address")
+  requiresApproval  Boolean   @default(false) @map("requires_approval")
+  approvedBy        String?   @map("approved_by")
+  approvedAt        DateTime? @map("approved_at")
+  rejectionReason   String?   @map("rejection_reason")
+  metadata          Json      @default("{}")
+  errorMessage      String?   @map("error_message")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  merchant     Merchant?    @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  approval     Approval?
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([agentId])
+  @@index([status])
+  @@index([blockchainTxHash])
+  @@map("transactions")
+}
+
+// ============================================================================
+// MERCHANTS
+// ============================================================================
+
+model Merchant {
+  id              String        @id @default(uuid())
+  name            String
+  category        String?
+  walletAddress   String?       @map("wallet_address")
+  website         String?
+  verified        Boolean       @default(false)
+  reputationScore Int           @default(50) @map("reputation_score") // 0-100
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  transactions Transaction[]
+
+  @@index([walletAddress])
+  @@map("merchants")
+}
+
+// ============================================================================
+// APPROVALS
+// ============================================================================
+
+model Approval {
+  id                String    @id @default(uuid())
+  transactionId     String    @unique @map("transaction_id")
+  organizationId    String    @map("organization_id")
+  status            String    @default("pending") // pending, approved, rejected, expired
+  requiredApprovers Int       @default(1) @map("required_approvers")
+  currentApprovers  Int       @default(0) @map("current_approvers")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  transaction Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  actions     ApprovalAction[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("approvals")
+}
+
+model ApprovalAction {
+  id         String   @id @default(uuid())
+  approvalId String   @map("approval_id")
+  userId     String   @map("user_id")
+  action     String   // approved, rejected
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  approval Approval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([approvalId])
+  @@map("approval_actions")
+}
+
+// ============================================================================
+// WEBHOOKS
+// ============================================================================
+
+model Webhook {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  url            String
+  events         String[]  // ['transaction.completed', 'transaction.failed']
+  secret         String    // For signature verification
+  enabled        Boolean   @default(true)
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  failureCount   Int       @default(0) @map("failure_count")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events_log   WebhookEvent[]
+
+  @@index([organizationId])
+  @@map("webhooks")
+}
+
+model WebhookEvent {
+  id             String    @id @default(uuid())
+  webhookId      String    @map("webhook_id")
+  eventType      String    @map("event_type")
+  payload        Json
+  responseStatus Int?      @map("response_status")
+  responseBody   String?   @map("response_body")
+  delivered      Boolean   @default(false)
+  attempts       Int       @default(0)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  deliveredAt    DateTime? @map("delivered_at")
+
+  // Relations
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([delivered])
+  @@map("webhook_events")
+}
+
+// ============================================================================
+// LEDGER (Double-Entry Accounting)
+// ============================================================================
+
+model LedgerEntry {
+  id            String   @id @default(uuid())
+  transactionId String?  @map("transaction_id")
+  account       String   // e.g., "agent:agent_123", "merchant:merchant_456"
+  debit         Decimal  @default(0) @db.Decimal(20, 6)
+  credit        Decimal  @default(0) @db.Decimal(20, 6)
+  balance       Decimal  @db.Decimal(20, 6) // Running balance after this entry
+  currency      String   @default("USD")
+  description   String?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([account, createdAt])
+  @@index([transactionId])
+  @@map("ledger_entries")
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String?  @map("organization_id")
+  userId         String?  @map("user_id")
+  action         String
+  resourceType   String?  @map("resource_type") // agent, rule, transaction
+  resourceId     String?  @map("resource_id")
+  changes        Json?
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
