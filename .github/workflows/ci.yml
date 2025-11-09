@@ -10,10 +10,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: backend
-
     env:
       NODE_ENV: test
       JWT_SECRET: ci-test-secret
@@ -36,9 +32,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: backend
 
       - name: Start services
         run: docker compose up -d
+        working-directory: backend
 
       - name: Wait for services
         run: |
@@ -51,17 +49,22 @@ jobs:
           done
           echo "PostgreSQL did not become ready in time" >&2
           exit 1
+        working-directory: backend
 
       - name: Generate Prisma client
         run: npm run db:generate
+        working-directory: backend
 
       - name: Apply database schema
         run: npm run db:push
+        working-directory: backend
 
       - name: Run tests
         run: npm test
+        working-directory: backend
 
       - name: Stop services
         if: always()
         run: docker compose down
+        working-directory: backend
 
