@@ -12,9 +12,12 @@ import { JWTPayload } from './auth.types';
  * Generate JWT token
  */
 export function generateJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
-  return jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiry,
-  });
+  const secret = config.jwt.secret as jwt.Secret;
+  const options: jwt.SignOptions = {
+    expiresIn: config.jwt.expiry as jwt.SignOptions['expiresIn'],
+  };
+
+  return jwt.sign(payload, secret, options);
 }
 
 /**
