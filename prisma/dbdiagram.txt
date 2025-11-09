@@ -1,0 +1,295 @@
+// Auton Database Schema - dbdiagram.io format
+// Copy this entire file and paste it at https://dbdiagram.io/
+
+Table organizations {
+  id varchar [pk]
+  name varchar [not null]
+  email varchar [unique, not null]
+  kyc_status varchar [default: 'pending', note: 'pending, approved, rejected']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Organizations/companies using the platform'
+}
+
+Table users {
+  id varchar [pk]
+  organization_id varchar [not null]
+  email varchar [unique, not null]
+  password_hash varchar [not null]
+  role varchar [default: 'member', note: 'owner, admin, member']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+  }
+
+  Note: 'Users who manage organizations and agents'
+}
+
+Table api_keys {
+  id varchar [pk]
+  organization_id varchar [not null]
+  key_hash varchar [not null, note: 'Hashed API key (never plain text)']
+  name varchar
+  last_used_at timestamp
+  expires_at timestamp
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+    key_hash
+  }
+
+  Note: 'API keys for programmatic access'
+}
+
+Table agents {
+  id varchar [pk]
+  organization_id varchar [not null]
+  name varchar [not null]
+  description varchar
+  wallet_address varchar
+  status varchar [default: 'active', note: 'active, paused, deleted']
+  metadata json [default: '{}']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+    wallet_address
+    status
+  }
+
+  Note: 'AI agents that can spend money'
+}
+
+Table agent_balances {
+  agent_id varchar [pk]
+  balance_usd decimal(20,6) [default: 0]
+  balance_usdc decimal(20,6) [default: 0]
+  pending_usd decimal(20,6) [default: 0]
+  last_updated_at timestamp [default: `now()`]
+
+  Note: 'Cached agent balances for quick access'
+}
+
+Table spending_rules {
+  id varchar [pk]
+  organization_id varchar [not null]
+  agent_id varchar [note: 'null = org-wide rule']
+  rule_type varchar [not null, note: 'per_transaction, daily, weekly, monthly, category, velocity']
+  limit_amount decimal(20,6)
+  limit_currency varchar [default: 'USD']
+  time_window varchar [note: 'hourly, daily, weekly, monthly']
+  category varchar
+  conditions json [default: '{}', note: 'Flexible JSON for complex conditions']
+  priority int [default: 100]
+  enabled boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+    agent_id
+    enabled
+  }
+
+  Note: 'Spending rules and limits for agents'
+}
+
+Table transactions {
+  id varchar [pk]
+  organization_id varchar [not null]
+  agent_id varchar [not null]
+  amount decimal(20,6) [not null]
+  currency varchar [default: 'USD']
+  merchant_id varchar
+  merchant_name varchar
+  category varchar
+  status varchar [default: 'pending', note: 'pending, pending_approval, processing, completed, failed, rejected']
+  payment_method varchar [not null, note: 'onchain, card']
+  blockchain_tx_hash varchar
+  blockchain_network varchar [default: 'base-mainnet']
+  from_address varchar
+  to_address varchar
+  requires_approval boolean [default: false]
+  approved_by varchar
+  approved_at timestamp
+  rejection_reason varchar
+  metadata json [default: '{}']
+  error_message varchar
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  completed_at timestamp
+
+  indexes {
+    (organization_id, created_at) [name: 'idx_org_created']
+    agent_id
+    status
+    blockchain_tx_hash
+  }
+
+  Note: 'Payment transactions executed by agents'
+}
+
+Table merchants {
+  id varchar [pk]
+  name varchar [not null]
+  category varchar
+  wallet_address varchar
+  website varchar
+  verified boolean [default: false]
+  reputation_score int [default: 50, note: '0-100']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    wallet_address
+  }
+
+  Note: 'Merchants that accept payments'
+}
+
+Table approvals {
+  id varchar [pk]
+  transaction_id varchar [unique, not null]
+  organization_id varchar [not null]
+  status varchar [default: 'pending', note: 'pending, approved, rejected, expired']
+  required_approvers int [default: 1]
+  current_approvers int [default: 0]
+  expires_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+    status
+  }
+
+  Note: 'Multi-party approval workflow for transactions'
+}
+
+Table approval_actions {
+  id varchar [pk]
+  approval_id varchar [not null]
+  user_id varchar [not null]
+  action varchar [not null, note: 'approved, rejected']
+  comment varchar
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    approval_id
+  }
+
+  Note: 'Individual approval/rejection actions by users'
+}
+
+Table webhooks {
+  id varchar [pk]
+  organization_id varchar [not null]
+  url varchar [not null]
+  events varchar[] [note: 'Array of event types: transaction.completed, etc.']
+  secret varchar [not null, note: 'For signature verification']
+  enabled boolean [default: true]
+  last_triggered_at timestamp
+  failure_count int [default: 0]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    organization_id
+  }
+
+  Note: 'Webhook endpoints for event notifications'
+}
+
+Table webhook_events {
+  id varchar [pk]
+  webhook_id varchar [not null]
+  event_type varchar [not null]
+  payload json [not null]
+  response_status int
+  response_body varchar
+  delivered boolean [default: false]
+  attempts int [default: 0]
+  created_at timestamp [default: `now()`]
+  delivered_at timestamp
+
+  indexes {
+    webhook_id
+    delivered
+  }
+
+  Note: 'Webhook event delivery log'
+}
+
+Table ledger_entries {
+  id varchar [pk]
+  transaction_id varchar
+  account varchar [not null, note: 'e.g., agent:agent_123, merchant:merchant_456']
+  debit decimal(20,6) [default: 0]
+  credit decimal(20,6) [default: 0]
+  balance decimal(20,6) [not null, note: 'Running balance after this entry']
+  currency varchar [default: 'USD']
+  description varchar
+  metadata json [default: '{}']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (account, created_at)
+    transaction_id
+  }
+
+  Note: 'Double-entry accounting ledger'
+}
+
+Table audit_logs {
+  id varchar [pk]
+  organization_id varchar
+  user_id varchar
+  action varchar [not null]
+  resource_type varchar [note: 'agent, rule, transaction']
+  resource_id varchar
+  changes json
+  ip_address varchar
+  user_agent varchar
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (organization_id, created_at) [name: 'idx_audit_org_created']
+    user_id
+    (resource_type, resource_id)
+  }
+
+  Note: 'Audit trail for all actions'
+}
+
+// ============================================================================
+// RELATIONSHIPS
+// ============================================================================
+
+// Organization Relationships
+Ref: users.organization_id > organizations.id [delete: cascade]
+Ref: api_keys.organization_id > organizations.id [delete: cascade]
+Ref: agents.organization_id > organizations.id [delete: cascade]
+Ref: spending_rules.organization_id > organizations.id [delete: cascade]
+Ref: transactions.organization_id > organizations.id [delete: cascade]
+Ref: webhooks.organization_id > organizations.id [delete: cascade]
+
+// Agent Relationships
+Ref: agent_balances.agent_id - agents.id [delete: cascade]
+Ref: spending_rules.agent_id > agents.id [delete: cascade]
+Ref: transactions.agent_id > agents.id [delete: cascade]
+
+// Transaction Relationships
+Ref: transactions.merchant_id > merchants.id [delete: set null]
+Ref: approvals.transaction_id - transactions.id [delete: cascade]
+
+// Approval Relationships
+Ref: approval_actions.approval_id > approvals.id [delete: cascade]
+Ref: approval_actions.user_id > users.id [delete: cascade]
+
+// Webhook Relationships
+Ref: webhook_events.webhook_id > webhooks.id [delete: cascade]
+

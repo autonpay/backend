@@ -170,6 +170,9 @@ export class RulesEngine {
     const maxTransactions = rule.conditions?.maxTransactions || 10;
     const timeWindowMinutes = rule.conditions?.timeWindowMinutes || 60;
 
+    logger.debug({ maxTransactions, timeWindowMinutes }, 'Evaluating velocity rule');
+    logger.debug({ request }, 'Request');
+
     // TODO: Query recent transactions
     // const recentCount = await this.getRecentTransactionCount(
     //   request.agentId,
