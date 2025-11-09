@@ -17,6 +17,7 @@ declare global {
         id: string;
         organizationId: string;
         name?: string;
+        environment: 'live' | 'test';
       };
     }
   }
@@ -75,6 +76,7 @@ export async function authenticate(
         id: validatedKey.id,
         organizationId: validatedKey.organizationId,
         name: validatedKey.name,
+        environment: validatedKey.environment,
       };
 
       logger.debug({ apiKeyId: validatedKey.id }, 'Request authenticated via API key');
