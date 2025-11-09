@@ -10,7 +10,6 @@ import {
   CreateRuleInput,
   SpendRequest,
   RuleEvaluationResult,
-  RuleAction,
   RuleType,
 } from './rules.types';
 import { logger } from '../../shared/logger';
@@ -53,6 +52,8 @@ export class RulesService {
    * Get all rules for an agent (including org-wide rules)
    */
   async getRulesForAgent(agentId: string): Promise<SpendingRule[]> {
+    logger.debug({ agentId }, 'Getting rules for agent');
+
     // TODO: Implement Prisma query
     // Get agent-specific rules + org-wide rules
     // return prisma.spendingRule.findMany({

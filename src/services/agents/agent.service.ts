@@ -13,7 +13,7 @@ import {
   AgentBalance
 } from './agent.types';
 import { AgentRepository } from './agent.repository';
-import { NotFoundError, ConflictError } from '../../shared/errors';
+import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 
 export class AgentService {
