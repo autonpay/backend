@@ -147,7 +147,7 @@ export class AuthService {
   async generateAPIKey(
     organizationId: string,
     name?: string,
-    prefix: string = 'live'
+    prefix: 'live' | 'test' = 'live'
   ): Promise<APIKeyResult> {
     logger.info({ organizationId, name }, 'Generating API key');
 
@@ -161,6 +161,7 @@ export class AuthService {
         organizationId,
         keyHash,
         name: name || `API Key (${new Date().toISOString().split('T')[0]})`,
+        environment: prefix,
       },
     });
 
@@ -170,6 +171,7 @@ export class AuthService {
       key,        // Show this to user once!
       keyHash,    // Stored in database
       id: apiKey.id,
+      environment: apiKey.environment as 'live' | 'test',
     };
   }
 
@@ -192,6 +194,7 @@ export class AuthService {
         keyHash: true,
         organizationId: true,
         name: true,
+        environment: true,
       },
     });
 
@@ -211,6 +214,7 @@ export class AuthService {
           id: apiKey.id,
           organizationId: apiKey.organizationId,
           name: apiKey.name || undefined,
+          environment: apiKey.environment as 'live' | 'test',
         };
       }
     }
@@ -254,6 +258,7 @@ export class AuthService {
     name: string | null;
     createdAt: Date;
     lastUsedAt: Date | null;
+    environment: 'live' | 'test';
   }>> {
     logger.debug({ organizationId }, 'Listing API keys');
 
@@ -264,11 +269,15 @@ export class AuthService {
         name: true,
         createdAt: true,
         lastUsedAt: true,
+        environment: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return apiKeys;
+    return apiKeys.map((apiKey: { id: string; name: string | null; createdAt: Date; lastUsedAt: Date | null; environment: 'live' | 'test' }) => ({
+      ...apiKey,
+      environment: apiKey.environment,
+    }));
   }
 
   /**
