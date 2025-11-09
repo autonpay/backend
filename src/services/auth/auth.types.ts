@@ -45,15 +45,19 @@ export interface JWTPayload {
   exp?: number;
 }
 
+export type ApiKeyEnvironment = 'live' | 'test';
+
 export interface APIKeyResult {
   key: string;      // Shown to user once (e.g., "sk_live_abc123...")
   keyHash: string;  // Stored in database
   id: string;       // API key ID
+  environment: ApiKeyEnvironment;
 }
 
 export interface ValidatedAPIKey {
   id: string;
   organizationId: string;
   name?: string;
+  environment: ApiKeyEnvironment;
 }
 

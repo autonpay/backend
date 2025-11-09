@@ -22,6 +22,7 @@ export function errorHandler(
   // Handle known application errors
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
+      success: false,
       error: err.code || 'ERROR',
       message: err.message,
       ...(err.details && { details: err.details }),
@@ -31,6 +32,7 @@ export function errorHandler(
   // Handle Zod validation errors
   if (err.name === 'ZodError') {
     return res.status(400).json({
+      success: false,
       error: 'VALIDATION_ERROR',
       message: 'Invalid request data',
       details: (err as any).errors,
@@ -43,6 +45,7 @@ export function errorHandler(
 
     if (prismaError.code === 'P2002') {
       return res.status(409).json({
+        success: false,
         error: 'CONFLICT',
         message: 'Resource already exists',
         details: { field: prismaError.meta?.target },
@@ -51,6 +54,7 @@ export function errorHandler(
 
     if (prismaError.code === 'P2025') {
       return res.status(404).json({
+        success: false,
         error: 'NOT_FOUND',
         message: 'Resource not found',
       });
@@ -59,6 +63,7 @@ export function errorHandler(
 
   // Default to 500 server error
   return res.status(500).json({
+    success: false,
     error: 'INTERNAL_SERVER_ERROR',
     message: 'An unexpected error occurred',
   });
