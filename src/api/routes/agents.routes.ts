@@ -116,8 +116,12 @@ router.get(
       const { id } = req.params as { id: string };
       const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
 
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
       // Verify ownership
-      await container.agentService.verifyOwnership(id, organizationId!);
+      await container.agentService.verifyOwnership(id, organizationId);
 
       const agent = await container.agentService.getAgent(id);
 
@@ -140,8 +144,12 @@ router.patch(
       const { id } = req.params as { id: string };
       const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
 
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
       // Verify ownership
-      await container.agentService.verifyOwnership(id, organizationId!);
+      await container.agentService.verifyOwnership(id, organizationId);
 
       const { name, description, status, metadata } = req.body as {
         name?: string;
@@ -178,8 +186,12 @@ router.delete(
       const { id } = req.params as { id: string };
       const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
 
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
       // Verify ownership
-      await container.agentService.verifyOwnership(id, organizationId!);
+      await container.agentService.verifyOwnership(id, organizationId);
 
       await container.agentService.deleteAgent(id);
 
@@ -202,8 +214,12 @@ router.get(
       const { id } = req.params as { id: string };
       const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
 
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
       // Verify ownership
-      await container.agentService.verifyOwnership(id, organizationId!);
+      await container.agentService.verifyOwnership(id, organizationId);
 
       const balance = await container.agentService.getAgentBalance(id);
 
