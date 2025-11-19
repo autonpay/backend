@@ -36,8 +36,48 @@ const updateOrganizationSchema = z
 router.use(authenticate);
 
 /**
- * GET /organizations/:id
- * Get organization details
+ * @swagger
+ * /v1/organizations/{id}:
+ *   get:
+ *     summary: Get organization details
+ *     tags: [Organizations]
+ *     security:
+ *       - bearerAuth: []
+ *       - apiKey: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Organization ID (use "me" for current organization)
+ *     responses:
+ *       200:
+ *         description: Organization details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Organization'
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Organization not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/:id',
