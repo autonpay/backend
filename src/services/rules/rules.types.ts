@@ -50,6 +50,17 @@ export interface CreateRuleInput {
   priority?: number;
 }
 
+export interface UpdateRuleInput {
+  ruleType?: RuleType;
+  limitAmount?: number;
+  limitCurrency?: string;
+  timeWindow?: TimeWindow;
+  category?: string;
+  conditions?: Record<string, any>;
+  priority?: number;
+  enabled?: boolean;
+}
+
 export interface SpendRequest {
   agentId: string;
   amount: number;
