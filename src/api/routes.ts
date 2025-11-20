@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import organizationRoutes from './routes/organizations.routes';
 import agentRoutes from './routes/agents.routes';
+import rulesRoutes from './routes/rules.routes';
 
 export function registerRoutes(app: Application) {
   const v1Router = Router();
@@ -31,11 +32,11 @@ export function registerRoutes(app: Application) {
   // Agent routes
   v1Router.use('/agents', agentRoutes);
 
+  // Rules routes
+  v1Router.use('/rules', rulesRoutes);
+
   // TODO: Transaction routes
   // v1Router.use('/transactions', transactionRoutes);
-
-  // TODO: Rules routes
-  // v1Router.use('/rules', rulesRoutes);
 
   // TODO: Webhook routes
   // v1Router.use('/webhooks', webhookRoutes);
@@ -50,6 +51,7 @@ export function registerRoutes(app: Application) {
         dashboard: '/v1/dashboard',
         organizations: '/v1/organizations',
         agents: '/v1/agents',
+        rules: '/v1/rules',
       },
     });
   });

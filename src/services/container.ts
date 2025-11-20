@@ -9,7 +9,7 @@
  */
 
 import { AgentService, AgentRepository } from './agents';
-import { RulesService } from './rules';
+import { RulesService, RulesRepository } from './rules';
 import { TransactionOrchestrator } from './transactions';
 import { LedgerService, LedgerRepository } from './ledger';
 import { OrganizationService, OrganizationRepository } from './organizations';
@@ -94,7 +94,8 @@ class ServiceContainer {
    */
   get rulesService(): RulesService {
     if (!this._rulesService) {
-      this._rulesService = new RulesService();
+      const repository = new RulesRepository();
+      this._rulesService = new RulesService(repository, this.agentService);
     }
     return this._rulesService;
   }
