@@ -26,7 +26,7 @@ export class RulesService {
     private repository: RulesRepository,
     private agentService: AgentService
   ) {
-    this.engine = new RulesEngine();
+    this.engine = new RulesEngine(repository);
   }
 
   /**
@@ -39,7 +39,7 @@ export class RulesService {
     const rules = await this.getRulesForAgent(request.agentId);
 
     if (rules.length === 0) {
-      logger.debug('No rules found, auto-approving');
+      logger.debug('No rules found, auto-approving'); // Make e flex
       return { approved: true };
     }
 

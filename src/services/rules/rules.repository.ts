@@ -7,8 +7,11 @@
 
 import { prisma } from '../../database/client';
 import { SpendingRule, CreateRuleInput, UpdateRuleInput } from './rules.types';
+import { TransactionRepository } from '../transactions';
+import { subDays, subWeeks, subMonths } from 'date-fns';
 
 export class RulesRepository {
+  constructor(private transactionRepository?: TransactionRepository) {}
   /**
    * Find rule by ID
    */
@@ -134,43 +137,69 @@ export class RulesRepository {
 
   /**
    * Get spending in time window for an agent
-   * TODO: Implement when transactions are available
    */
   async getSpendingInWindow(
-    _agentId: string,
-    _timeWindow: string,
-    _startDate: Date
+    agentId: string,
+    timeWindow: string,
+    startDate: Date
   ): Promise<number> {
-    // This will be used by the rules engine to check time-based limits
-    // For now, we'll query transactions (when they're implemented)
-    // For MVP, return 0 as placeholder
-    return 0;
+    if (!this.transactionRepository) {
+      return 0; // Return 0 if transaction repository not available
+    }
+
+    let endDate: Date;
+    switch (timeWindow) {
+      case 'hourly':
+        endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        break;
+      case 'daily':
+        endDate = subDays(startDate, -1);
+        break;
+      case 'weekly':
+        endDate = subWeeks(startDate, -1);
+        break;
+      case 'monthly':
+        endDate = subMonths(startDate, -1);
+        break;
+      default:
+        endDate = new Date();
+    }
+
+    return this.transactionRepository.getSpendingInWindow({
+      agentId,
+      startDate,
+      endDate,
+    });
   }
 
   /**
    * Get category spending in time window
-   * TODO: Implement when transactions are available
    */
   async getCategorySpending(
-    _agentId: string,
-    _category: string,
-    _timeWindow: string,
-    _startDate: Date
+    agentId: string,
+    category: string,
+    timeWindow: string,
+    startDate: Date
   ): Promise<number> {
-    // Placeholder - will be implemented when transactions are ready
-    return 0;
+    if (!this.transactionRepository) {
+      return 0;
+    }
+
+    return this.transactionRepository.getCategorySpending(agentId, category, timeWindow, startDate);
   }
 
   /**
    * Get recent transaction count for velocity checks
-   * TODO: Implement when transactions are available
    */
   async getRecentTransactionCount(
-    _agentId: string,
-    _timeWindowMinutes: number
+    agentId: string,
+    timeWindowMinutes: number
   ): Promise<number> {
-    // Placeholder - will be implemented when transactions are ready
-    return 0;
+    if (!this.transactionRepository) {
+      return 0;
+    }
+
+    return this.transactionRepository.getRecentTransactionCount(agentId, timeWindowMinutes);
   }
 
   /**

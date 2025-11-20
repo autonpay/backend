@@ -8,6 +8,7 @@
  * - PATCH /agents/:id - Update agent
  * - DELETE /agents/:id - Delete agent
  * - GET /agents/:id/balance - Get agent balance
+ * - POST /agents/:id/spend - Initiate spend request
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -313,6 +314,46 @@ router.delete(
       await container.agentService.deleteAgent(id);
 
       return responses.ok(res, null, 'Agent deleted successfully');
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
+ * POST /agents/:id/spend
+ * Initiate a spend request for an agent
+ */
+const spendSchema = z.object({
+  amount: z.number().positive('Amount must be positive'),
+  currency: z.string().min(3).max(3).default('USD').optional(),
+  merchantId: z.string().uuid().optional(),
+  merchantName: z.string().optional(),
+  category: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+router.post(
+  '/:id/spend',
+  validate({ params: agentIdParamsSchema, body: spendSchema }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id: agentId } = req.params as { id: string };
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
+
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
+      // Verify ownership
+      await container.agentService.verifyOwnership(agentId, organizationId);
+
+      const transaction = await container.transactionOrchestrator.initiateSpend({
+        agentId,
+        ...req.body,
+      });
+
+      return responses.created(res, transaction, 'Spend request initiated successfully');
     } catch (error) {
       return next(error);
     }

@@ -11,14 +11,17 @@ import {
   TransactionStatus,
   PaymentMethod
 } from './transaction.types';
+import { TransactionRepository } from './transaction.repository';
 import { AgentService } from '../agents';
 import { RulesService, SpendRequest } from '../rules';
 import { LedgerService } from '../ledger';
+import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 import { InsufficientBalanceError, RuleViolationError } from '../../shared/errors';
 
 export class TransactionOrchestrator {
   constructor(
+    private repository: TransactionRepository,
     private agentService: AgentService,
     private rulesService: RulesService,
     private ledgerService: LedgerService
@@ -101,20 +104,49 @@ export class TransactionOrchestrator {
   /**
    * Create transaction record in database
    */
-  private async createTransaction(data: any): Promise<Transaction> {
-    // TODO: Implement Prisma query
-    // return prisma.transaction.create({ data });
-
-    // Placeholder for now
-    return {
-      id: `txn_${Date.now()}`,
+  private async createTransaction(data: CreateTransactionInput & {
+    organizationId: string;
+    status: TransactionStatus;
+    requiresApproval: boolean;
+  }): Promise<Transaction> {
+    return this.repository.create({
       ...data,
-      currency: data.currency || 'USD',
       paymentMethod: PaymentMethod.ONCHAIN,
-      metadata: data.metadata || {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as Transaction;
+    });
+  }
+
+  /**
+   * Get transaction by ID
+   */
+  async getTransaction(id: string): Promise<Transaction> {
+    const transaction = await this.repository.findById(id);
+    if (!transaction) {
+      throw new NotFoundError('Transaction', id);
+    }
+    return transaction;
+  }
+
+  /**
+   * List transactions for organization
+   */
+  async listTransactions(query: {
+    organizationId: string;
+    agentId?: string;
+    status?: TransactionStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<Transaction[]> {
+    return this.repository.list(query);
+  }
+
+  /**
+   * Verify transaction ownership
+   */
+  async verifyOwnership(transactionId: string, organizationId: string): Promise<void> {
+    const hasAccess = await this.repository.verifyOwnership(transactionId, organizationId);
+    if (!hasAccess) {
+      throw new NotFoundError('Transaction', transactionId);
+    }
   }
 
   /**
@@ -125,11 +157,10 @@ export class TransactionOrchestrator {
   async processTransaction(transactionId: string): Promise<void> {
     logger.info({ transactionId }, 'Processing transaction');
 
-    // TODO: Get transaction from database
-    // const transaction = await this.getTransaction(transactionId);
+    const transaction = await this.getTransaction(transactionId);
 
-    // TODO: Update status to PROCESSING
-    // await this.updateTransactionStatus(transactionId, TransactionStatus.PROCESSING);
+    // Update status to PROCESSING
+    await this.repository.updateStatus(transactionId, TransactionStatus.PROCESSING);
 
     try {
       // TODO: Determine payment method and route accordingly
@@ -139,20 +170,26 @@ export class TransactionOrchestrator {
       //   await this.cardBridgeService.processCardPayment(transaction);
       // }
 
-      // TODO: Update status to COMPLETED
-      // await this.updateTransactionStatus(transactionId, TransactionStatus.COMPLETED);
+      // For now, simulate success (will be replaced with actual blockchain call)
+      logger.debug({ transactionId, paymentMethod: transaction.paymentMethod }, 'Simulating transaction execution');
+
+      // Update status to COMPLETED
+      await this.repository.updateStatus(transactionId, TransactionStatus.COMPLETED);
+
+      // TODO: Update ledger
+      // await this.ledgerService.recordTransaction(transaction);
 
       // TODO: Trigger webhook
       // await this.webhookService.trigger('transaction.completed', transaction);
 
       logger.info({ transactionId }, 'Transaction completed successfully');
     } catch (error) {
-      logger.error({ transactionId, error }, 'Transaction processing failed');
+      logger.error({ transactionId, err: error }, 'Transaction processing failed');
 
-      // TODO: Update status to FAILED
-      // await this.updateTransactionStatus(transactionId, TransactionStatus.FAILED, {
-      //   errorMessage: error.message,
-      // });
+      // Update status to FAILED
+      await this.repository.updateStatus(transactionId, TransactionStatus.FAILED, {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
 
       // TODO: Trigger webhook
       // await this.webhookService.trigger('transaction.failed', transaction);
