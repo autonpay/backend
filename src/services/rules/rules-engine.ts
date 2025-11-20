@@ -12,9 +12,12 @@ import {
   RuleAction,
   RuleType,
 } from './rules.types';
+import { RulesRepository } from './rules.repository';
 import { logger } from '../../shared/logger';
+import { subDays, subWeeks, subMonths } from 'date-fns';
 
 export class RulesEngine {
+  constructor(private repository: RulesRepository) {}
   /**
    * Evaluate spend request against all rules
    */
@@ -113,15 +116,29 @@ export class RulesEngine {
     request: SpendRequest,
     rule: SpendingRule
   ): Promise<RuleAction> {
-    if (!rule.limitAmount) return RuleAction.APPROVE;
+    if (!rule.limitAmount || !rule.timeWindow) return RuleAction.APPROVE;
 
-    // TODO: Query database for spending in time window
-    // const spending = await this.getSpendingInWindow(
-    //   request.agentId,
-    //   rule.timeWindow
-    // );
+    // Calculate start date based on time window
+    let startDate: Date;
+    switch (rule.timeWindow) {
+      case 'daily':
+        startDate = subDays(new Date(), 1);
+        break;
+      case 'weekly':
+        startDate = subWeeks(new Date(), 1);
+        break;
+      case 'monthly':
+        startDate = subMonths(new Date(), 1);
+        break;
+      default:
+        startDate = new Date();
+    }
 
-    const spending = 0; // Placeholder
+    const spending = await this.repository.getSpendingInWindow(
+      request.agentId,
+      rule.timeWindow,
+      startDate
+    );
 
     if (spending + request.amount > rule.limitAmount) {
       return RuleAction.DENY;
@@ -142,16 +159,30 @@ export class RulesEngine {
       return RuleAction.APPROVE;
     }
 
-    if (!rule.limitAmount) return RuleAction.APPROVE;
+    if (!rule.limitAmount || !rule.timeWindow) return RuleAction.APPROVE;
 
-    // TODO: Query database for category spending in time window
-    // const categorySpending = await this.getCategorySpending(
-    //   request.agentId,
-    //   rule.category,
-    //   rule.timeWindow
-    // );
+    // Calculate start date based on time window
+    let startDate: Date;
+    switch (rule.timeWindow) {
+      case 'daily':
+        startDate = subDays(new Date(), 1);
+        break;
+      case 'weekly':
+        startDate = subWeeks(new Date(), 1);
+        break;
+      case 'monthly':
+        startDate = subMonths(new Date(), 1);
+        break;
+      default:
+        startDate = new Date();
+    }
 
-    const categorySpending = 0; // Placeholder
+    const categorySpending = await this.repository.getCategorySpending(
+      request.agentId,
+      rule.category!,
+      rule.timeWindow,
+      startDate
+    );
 
     if (categorySpending + request.amount > rule.limitAmount) {
       return RuleAction.DENY;
@@ -171,15 +202,11 @@ export class RulesEngine {
     const timeWindowMinutes = rule.conditions?.timeWindowMinutes || 60;
 
     logger.debug({ maxTransactions, timeWindowMinutes }, 'Evaluating velocity rule');
-    logger.debug({ request }, 'Request');
 
-    // TODO: Query recent transactions
-    // const recentCount = await this.getRecentTransactionCount(
-    //   request.agentId,
-    //   timeWindowMinutes
-    // );
-
-    const recentCount = 0; // Placeholder
+    const recentCount = await this.repository.getRecentTransactionCount(
+      request.agentId,
+      timeWindowMinutes
+    );
 
     if (recentCount >= maxTransactions) {
       return RuleAction.DENY;
