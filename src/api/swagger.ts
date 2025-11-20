@@ -274,6 +274,70 @@ const swaggerDefinition: SwaggerDefinition = {
           },
         },
       },
+      Transaction: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            format: 'uuid',
+          },
+          organizationId: {
+            type: 'string',
+            format: 'uuid',
+          },
+          agentId: {
+            type: 'string',
+            format: 'uuid',
+          },
+          amount: {
+            type: 'number',
+          },
+          currency: {
+            type: 'string',
+            example: 'USD',
+          },
+          merchantId: {
+            type: 'string',
+            format: 'uuid',
+            nullable: true,
+          },
+          merchantName: {
+            type: 'string',
+            nullable: true,
+          },
+          category: {
+            type: 'string',
+            nullable: true,
+          },
+          status: {
+            type: 'string',
+            enum: ['pending', 'pending_approval', 'approved', 'processing', 'completed', 'failed', 'rejected'],
+          },
+          paymentMethod: {
+            type: 'string',
+            enum: ['onchain', 'card'],
+          },
+          blockchainTxHash: {
+            type: 'string',
+            nullable: true,
+          },
+          requiresApproval: {
+            type: 'boolean',
+          },
+          metadata: {
+            type: 'object',
+            additionalProperties: true,
+          },
+          createdAt: {
+            type: 'string',
+            format: 'date-time',
+          },
+          updatedAt: {
+            type: 'string',
+            format: 'date-time',
+          },
+        },
+      },
     },
   },
   tags: [
@@ -296,6 +360,10 @@ const swaggerDefinition: SwaggerDefinition = {
     {
       name: 'Rules',
       description: 'Spending rules and limits management',
+    },
+    {
+      name: 'Transactions',
+      description: 'Transaction management and spend requests',
     },
     {
       name: 'Dashboard',
