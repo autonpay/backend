@@ -215,6 +215,65 @@ const swaggerDefinition: SwaggerDefinition = {
           },
         },
       },
+      SpendingRule: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            format: 'uuid',
+          },
+          organizationId: {
+            type: 'string',
+            format: 'uuid',
+          },
+          agentId: {
+            type: 'string',
+            format: 'uuid',
+            nullable: true,
+            description: 'null for org-wide rules',
+          },
+          ruleType: {
+            type: 'string',
+            enum: ['per_transaction', 'daily', 'weekly', 'monthly', 'category', 'velocity', 'merchant_whitelist', 'merchant_blacklist'],
+          },
+          limitAmount: {
+            type: 'number',
+            nullable: true,
+          },
+          limitCurrency: {
+            type: 'string',
+            example: 'USD',
+          },
+          timeWindow: {
+            type: 'string',
+            enum: ['hourly', 'daily', 'weekly', 'monthly'],
+            nullable: true,
+          },
+          category: {
+            type: 'string',
+            nullable: true,
+          },
+          conditions: {
+            type: 'object',
+            additionalProperties: true,
+          },
+          priority: {
+            type: 'number',
+            description: 'Lower number = higher priority',
+          },
+          enabled: {
+            type: 'boolean',
+          },
+          createdAt: {
+            type: 'string',
+            format: 'date-time',
+          },
+          updatedAt: {
+            type: 'string',
+            format: 'date-time',
+          },
+        },
+      },
     },
   },
   tags: [
@@ -233,6 +292,10 @@ const swaggerDefinition: SwaggerDefinition = {
     {
       name: 'Agents',
       description: 'AI agent lifecycle and management',
+    },
+    {
+      name: 'Rules',
+      description: 'Spending rules and limits management',
     },
     {
       name: 'Dashboard',
