@@ -10,7 +10,7 @@
 
 import { AgentService, AgentRepository } from './agents';
 import { RulesService, RulesRepository } from './rules';
-import { TransactionOrchestrator } from './transactions';
+import { TransactionOrchestrator, TransactionRepository } from './transactions';
 import { LedgerService, LedgerRepository } from './ledger';
 import { OrganizationService, OrganizationRepository } from './organizations';
 import { UserService, UserRepository } from './users';
@@ -94,7 +94,9 @@ class ServiceContainer {
    */
   get rulesService(): RulesService {
     if (!this._rulesService) {
-      const repository = new RulesRepository();
+      // Get transaction repository for time-window queries
+      const transactionRepository = new TransactionRepository();
+      const repository = new RulesRepository(transactionRepository);
       this._rulesService = new RulesService(repository, this.agentService);
     }
     return this._rulesService;
@@ -116,7 +118,9 @@ class ServiceContainer {
    */
   get transactionOrchestrator(): TransactionOrchestrator {
     if (!this._transactionOrchestrator) {
+      const repository = new TransactionRepository();
       this._transactionOrchestrator = new TransactionOrchestrator(
+        repository,
         this.agentService,
         this.rulesService,
         this.ledgerService
