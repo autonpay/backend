@@ -8,17 +8,24 @@
 import {
   SpendingRule,
   CreateRuleInput,
+  UpdateRuleInput,
   SpendRequest,
   RuleEvaluationResult,
   RuleType,
 } from './rules.types';
+import { RulesRepository } from './rules.repository';
+import { AgentService } from '../agents';
+import { NotFoundError, UnauthorizedError, BadRequestError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 import { RulesEngine } from './rules-engine';
 
 export class RulesService {
   private engine: RulesEngine;
 
-  constructor() {
+  constructor(
+    private repository: RulesRepository,
+    private agentService: AgentService
+  ) {
     this.engine = new RulesEngine();
   }
 
@@ -54,20 +61,11 @@ export class RulesService {
   async getRulesForAgent(agentId: string): Promise<SpendingRule[]> {
     logger.debug({ agentId }, 'Getting rules for agent');
 
-    // TODO: Implement Prisma query
-    // Get agent-specific rules + org-wide rules
-    // return prisma.spendingRule.findMany({
-    //   where: {
-    //     OR: [
-    //       { agentId },
-    //       { agentId: null }
-    //     ],
-    //     enabled: true,
-    //   },
-    //   orderBy: { priority: 'asc' },
-    // });
+    // Get agent to find organizationId
+    const agent = await this.agentService.getAgent(agentId);
 
-    return [];
+    // Get agent-specific rules + org-wide rules
+    return this.repository.findByAgent(agentId, agent.organizationId);
   }
 
   /**
@@ -79,40 +77,41 @@ export class RulesService {
     // Validate rule configuration
     this.validateRuleInput(input);
 
-    // TODO: Implement Prisma query
-    // const rule = await prisma.spendingRule.create({
-    //   data: {
-    //     ...input,
-    //     limitCurrency: input.limitCurrency || 'USD',
-    //     priority: input.priority || 100,
-    //     enabled: true,
-    //     conditions: input.conditions || {},
-    //   },
-    // });
+    const rule = await this.repository.create(input);
 
-    logger.info({ ruleId: 'rule.id' }, 'Spending rule created');
+    logger.info({ ruleId: rule.id }, 'Spending rule created');
 
-    // TODO: Invalidate cache
-    // await this.invalidateRulesCache(input.agentId);
-
-    throw new Error('Not implemented');
+    return rule;
   }
 
   /**
    * Update spending rule
    */
-  async updateRule(id: string, updates: Partial<CreateRuleInput>): Promise<SpendingRule> {
+  async updateRule(id: string, updates: UpdateRuleInput): Promise<SpendingRule> {
     logger.info({ ruleId: id, updates }, 'Updating spending rule');
 
-    // TODO: Implement Prisma query
-    // const rule = await prisma.spendingRule.update({
-    //   where: { id },
-    //   data: updates,
-    // });
+    const rule = await this.repository.findById(id);
+    if (!rule) {
+      throw new NotFoundError('SpendingRule', id);
+    }
 
-    // TODO: Invalidate cache
+    // Validate if updating rule type
+    if (updates.ruleType !== undefined || updates.limitAmount !== undefined) {
+      const input: CreateRuleInput = {
+        organizationId: rule.organizationId,
+        agentId: rule.agentId,
+        ruleType: updates.ruleType || rule.ruleType,
+        limitAmount: updates.limitAmount !== undefined ? updates.limitAmount : rule.limitAmount,
+        limitCurrency: updates.limitCurrency || rule.limitCurrency,
+        timeWindow: updates.timeWindow || rule.timeWindow,
+        category: updates.category || rule.category,
+        conditions: updates.conditions || rule.conditions,
+        priority: updates.priority || rule.priority,
+      };
+      this.validateRuleInput(input);
+    }
 
-    throw new Error('Not implemented');
+    return this.repository.update(id, updates);
   }
 
   /**
@@ -121,12 +120,45 @@ export class RulesService {
   async deleteRule(id: string): Promise<void> {
     logger.info({ ruleId: id }, 'Deleting spending rule');
 
-    // TODO: Implement Prisma query
-    // await prisma.spendingRule.delete({ where: { id } });
+    const rule = await this.repository.findById(id);
+    if (!rule) {
+      throw new NotFoundError('SpendingRule', id);
+    }
 
-    // TODO: Invalidate cache
+    await this.repository.delete(id);
+  }
 
-    throw new Error('Not implemented');
+  /**
+   * Get rule by ID
+   */
+  async getRule(id: string): Promise<SpendingRule> {
+    logger.debug({ ruleId: id }, 'Getting rule');
+
+    const rule = await this.repository.findById(id);
+    if (!rule) {
+      throw new NotFoundError('SpendingRule', id);
+    }
+
+    return rule;
+  }
+
+  /**
+   * List rules for organization
+   */
+  async listRules(organizationId: string): Promise<SpendingRule[]> {
+    logger.debug({ organizationId }, 'Listing rules');
+
+    return this.repository.findByOrganization(organizationId);
+  }
+
+  /**
+   * Verify rule ownership
+   */
+  async verifyOwnership(ruleId: string, organizationId: string): Promise<void> {
+    const hasAccess = await this.repository.verifyOwnership(ruleId, organizationId);
+    if (!hasAccess) {
+      throw new UnauthorizedError('Cannot access this rule');
+    }
   }
 
   /**
@@ -134,18 +166,18 @@ export class RulesService {
    */
   private validateRuleInput(input: CreateRuleInput): void {
     if (input.ruleType === RuleType.PER_TRANSACTION && !input.limitAmount) {
-      throw new Error('Per-transaction rules require a limit amount');
+      throw new BadRequestError('Per-transaction rules require a limit amount');
     }
 
     if (
       [RuleType.DAILY, RuleType.WEEKLY, RuleType.MONTHLY].includes(input.ruleType) &&
       !input.limitAmount
     ) {
-      throw new Error('Time-based rules require a limit amount');
+      throw new BadRequestError('Time-based rules require a limit amount');
     }
 
     if (input.ruleType === RuleType.CATEGORY && !input.category) {
-      throw new Error('Category rules require a category');
+      throw new BadRequestError('Category rules require a category');
     }
   }
 }
