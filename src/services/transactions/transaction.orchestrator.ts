@@ -15,17 +15,21 @@ import { TransactionRepository } from './transaction.repository';
 import { AgentService } from '../agents';
 import { RulesService, SpendRequest } from '../rules';
 import { LedgerService } from '../ledger';
+import { BlockchainService } from '../blockchain';
+import { WebhookService } from '../webhooks';
 import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 import { InsufficientBalanceError, RuleViolationError } from '../../shared/errors';
+import { queueTransaction } from '../../queues/transaction.queue';
 
 export class TransactionOrchestrator {
   constructor(
     private repository: TransactionRepository,
     private agentService: AgentService,
     private rulesService: RulesService,
-    private ledgerService: LedgerService
-    // private blockchainService: BlockchainService,  // TODO: Inject when created
+    private ledgerService: LedgerService,
+    private blockchainService?: BlockchainService,
+    private webhookService?: WebhookService
   ) {}
 
   /**
@@ -93,8 +97,14 @@ export class TransactionOrchestrator {
       // await this.approvalService.createApproval(transaction);
       logger.info({ transactionId: transaction.id }, 'Transaction requires approval');
     } else {
-      // TODO: Queue for processing
-      // await this.queueTransaction(transaction);
+      // Queue for background processing
+      await queueTransaction({
+        transactionId: transaction.id,
+        organizationId: agent.organizationId,
+        agentId: transaction.agentId,
+        amount: transaction.amount,
+        currency: transaction.currency,
+      });
       logger.info({ transactionId: transaction.id }, 'Transaction queued for processing');
     }
 
@@ -163,24 +173,67 @@ export class TransactionOrchestrator {
     await this.repository.updateStatus(transactionId, TransactionStatus.PROCESSING);
 
     try {
-      // TODO: Determine payment method and route accordingly
-      // if (transaction.paymentMethod === PaymentMethod.ONCHAIN) {
-      //   await this.blockchainService.executeSpend(transaction);
-      // } else {
-      //   await this.cardBridgeService.processCardPayment(transaction);
-      // }
+      // Determine payment method and route accordingly
+      if (transaction.paymentMethod === PaymentMethod.ONCHAIN) {
+        if (!this.blockchainService) {
+          throw new Error('Blockchain service not available');
+        }
 
-      // For now, simulate success (will be replaced with actual blockchain call)
-      logger.debug({ transactionId, paymentMethod: transaction.paymentMethod }, 'Simulating transaction execution');
+        // Execute on-chain transaction
+        const result = await this.blockchainService.executeSpend(transaction);
+
+        // Wait for transaction confirmation (wait for at least 1 confirmation)
+        logger.info({ transactionId, txHash: result.txHash }, 'Waiting for transaction confirmation');
+        const confirmation = await this.blockchainService.waitForConfirmation(result.txHash, 1);
+
+        // Check if transaction was successful
+        if (confirmation.status === 'reverted' || confirmation.status === 'failed') {
+          throw new Error(`Transaction reverted or failed: ${confirmation.status}`);
+        }
+
+        // Update transaction with blockchain details
+        await this.repository.update(transactionId, {
+          blockchainTxHash: result.txHash,
+          blockchainNetwork: result.network,
+          fromAddress: transaction.fromAddress,
+          toAddress: transaction.toAddress,
+        });
+
+        logger.info(
+          { transactionId, txHash: result.txHash, confirmations: confirmation.confirmations },
+          'On-chain transaction confirmed'
+        );
+      } else {
+        // TODO: Card payment processing
+        logger.debug({ transactionId, paymentMethod: transaction.paymentMethod }, 'Card payment not yet implemented');
+      }
+
+      // Update ledger (double-entry accounting)
+      const toAccount = transaction.merchantId
+        ? `merchant:${transaction.merchantId}`
+        : transaction.toAddress
+          ? `external:${transaction.toAddress}`
+          : 'external:unknown';
+
+      await this.ledgerService.recordTransaction({
+        transactionId: transaction.id,
+        fromAccount: `agent:${transaction.agentId}`,
+        toAccount,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        description: transaction.merchantName || transaction.category || 'Payment',
+      });
 
       // Update status to COMPLETED
       await this.repository.updateStatus(transactionId, TransactionStatus.COMPLETED);
 
-      // TODO: Update ledger
-      // await this.ledgerService.recordTransaction(transaction);
+      // Get updated transaction for webhook
+      const completedTransaction = await this.getTransaction(transactionId);
 
-      // TODO: Trigger webhook
-      // await this.webhookService.trigger('transaction.completed', transaction);
+      // Trigger webhook
+      if (this.webhookService) {
+        await this.webhookService.triggerTransactionCompleted(completedTransaction);
+      }
 
       logger.info({ transactionId }, 'Transaction completed successfully');
     } catch (error) {
@@ -191,8 +244,16 @@ export class TransactionOrchestrator {
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
 
-      // TODO: Trigger webhook
-      // await this.webhookService.trigger('transaction.failed', transaction);
+      // Get updated transaction for webhook
+      const failedTransaction = await this.getTransaction(transactionId);
+
+      // Trigger webhook
+      if (this.webhookService) {
+        await this.webhookService.triggerTransactionFailed(
+          failedTransaction,
+          error instanceof Error ? error : new Error('Unknown error')
+        );
+      }
 
       throw error;
     }
