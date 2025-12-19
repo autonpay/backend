@@ -382,7 +382,7 @@ async function seed() {
     logger.info(`  Password: password123`);
 
   } catch (error) {
-    logger.error('❌ Seed failed:', error);
+    logger.error({ err: error }, '❌ Seed failed');
     throw error;
   } finally {
     await prisma.$disconnect();

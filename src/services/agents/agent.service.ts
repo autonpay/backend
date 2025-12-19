@@ -13,7 +13,7 @@ import {
   AgentBalance
 } from './agent.types';
 import { AgentRepository } from './agent.repository';
-import { NotFoundError, ConflictError } from '../../shared/errors';
+import { NotFoundError, UnauthorizedError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 
 export class AgentService {
@@ -137,9 +137,12 @@ export class AgentService {
   /**
    * Verify agent ownership
    */
-  async verifyOwnership(agentId: string, organizationId: string): Promise<boolean> {
+  async verifyOwnership(agentId: string, organizationId: string): Promise<void> {
     const agent = await this.getAgent(agentId);
-    return agent.organizationId === organizationId;
+
+    if (agent.organizationId !== organizationId) {
+      throw new UnauthorizedError('Cannot access this agent');
+    }
   }
 }
 
