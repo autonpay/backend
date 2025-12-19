@@ -15,6 +15,8 @@ import { LedgerService, LedgerRepository } from './ledger';
 import { OrganizationService, OrganizationRepository } from './organizations';
 import { UserService, UserRepository } from './users';
 import { AuthService } from './auth';
+import { BlockchainService } from './blockchain';
+import { WebhookService } from './webhooks';
 
 /**
  * Service Container
@@ -32,6 +34,8 @@ class ServiceContainer {
   private _agentService?: AgentService;
   private _rulesService?: RulesService;
   private _ledgerService?: LedgerService;
+  private _blockchainService?: BlockchainService;
+  private _webhookService?: WebhookService;
   private _transactionOrchestrator?: TransactionOrchestrator;
 
   private constructor() {}
@@ -114,6 +118,26 @@ class ServiceContainer {
   }
 
   /**
+   * Get Blockchain Service
+   */
+  get blockchainService(): BlockchainService {
+    if (!this._blockchainService) {
+      this._blockchainService = new BlockchainService(this.agentService);
+    }
+    return this._blockchainService;
+  }
+
+  /**
+   * Get Webhook Service
+   */
+  get webhookService(): WebhookService {
+    if (!this._webhookService) {
+      this._webhookService = new WebhookService();
+    }
+    return this._webhookService;
+  }
+
+  /**
    * Get Transaction Orchestrator
    */
   get transactionOrchestrator(): TransactionOrchestrator {
@@ -123,9 +147,9 @@ class ServiceContainer {
         repository,
         this.agentService,
         this.rulesService,
-        this.ledgerService
-        // Add more dependencies as we build them:
-        // this.blockchainService,
+        this.ledgerService,
+        this.blockchainService,
+        this.webhookService
       );
     }
     return this._transactionOrchestrator;
@@ -141,6 +165,8 @@ class ServiceContainer {
     this._agentService = undefined;
     this._rulesService = undefined;
     this._ledgerService = undefined;
+    this._blockchainService = undefined;
+    this._webhookService = undefined;
     this._transactionOrchestrator = undefined;
   }
 }

@@ -130,6 +130,38 @@ export class TransactionRepository {
   }
 
   /**
+   * Update transaction fields
+   */
+  async update(
+    id: string,
+    updates: {
+      blockchainTxHash?: string;
+      blockchainNetwork?: string;
+      fromAddress?: string;
+      toAddress?: string;
+      status?: TransactionStatus;
+      errorMessage?: string;
+    }
+  ): Promise<Transaction> {
+    const updateData: any = {
+      ...(updates.blockchainTxHash && { blockchainTxHash: updates.blockchainTxHash }),
+      ...(updates.blockchainNetwork && { blockchainNetwork: updates.blockchainNetwork }),
+      ...(updates.fromAddress && { fromAddress: updates.fromAddress }),
+      ...(updates.toAddress && { toAddress: updates.toAddress }),
+      ...(updates.status && { status: updates.status }),
+      ...(updates.status === TransactionStatus.COMPLETED && { completedAt: new Date() }),
+      ...(updates.errorMessage && { errorMessage: updates.errorMessage }),
+    };
+
+    const transaction = await prisma.transaction.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return this.mapToTransaction(transaction);
+  }
+
+  /**
    * Get spending in time window for an agent
    */
   async getSpendingInWindow(query: SpendingInWindowQuery): Promise<number> {
