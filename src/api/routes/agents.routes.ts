@@ -388,5 +388,44 @@ router.get(
   }
 );
 
+/**
+ * POST /agents/:id/deposit
+ * Deposit funds to an agent
+ */
+const depositSchema = z.object({
+  amount: z.number().positive('Amount must be positive'),
+  description: z.string().optional(),
+});
+
+router.post(
+  '/:id/deposit',
+  validate({ params: agentIdParamsSchema, body: depositSchema }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id: agentId } = req.params as { id: string };
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
+
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
+      // Verify ownership
+      await container.agentService.verifyOwnership(agentId, organizationId);
+
+      const { amount, description } = req.body as { amount: number; description?: string };
+
+      // Deposit funds via ledger service
+      await container.ledgerService.deposit(agentId, amount, description || 'Deposit');
+
+      // Get updated balance
+      const balance = await container.agentService.getAgentBalance(agentId);
+
+      return responses.ok(res, balance, `Successfully deposited $${amount}`);
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 export default router;
 
