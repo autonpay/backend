@@ -323,6 +323,8 @@ router.delete(
 /**
  * POST /agents/:id/spend
  * Initiate a spend request for an agent
+ *
+ * Requires either toAddress (for direct transfers) or merchantId (for merchant payments via x402)
  */
 const spendSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
@@ -330,8 +332,34 @@ const spendSchema = z.object({
   merchantId: z.string().uuid().optional(),
   merchantName: z.string().optional(),
   category: z.string().optional(),
+  toAddress: z
+    .string()
+    .optional()
+    .transform((val) => (val === '' || val === undefined ? undefined : val))
+    .refine(
+      (val) => {
+        if (val === undefined) return true;
+        if (!/^0x[a-fA-F0-9]{40}$/.test(val)) {
+          return false;
+        }
+        return true;
+      },
+      {
+        message: 'toAddress must be a valid Ethereum address (0x followed by exactly 40 hex characters, total length 42)'
+      }
+    ),
   metadata: z.record(z.any()).optional(),
-});
+}).refine(
+  (data) => {
+    const hasToAddress = data.toAddress && data.toAddress.trim() !== '';
+    const hasMerchantId = data.merchantId && data.merchantId.trim() !== '';
+    return hasToAddress || hasMerchantId;
+  },
+  {
+    message: 'Either toAddress (for direct transfers) or merchantId (for merchant payments) must be provided',
+    path: ['toAddress'],
+  }
+);
 
 router.post(
   '/:id/spend',
