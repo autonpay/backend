@@ -50,6 +50,7 @@ export interface CreateTransactionInput {
   merchantId?: string;
   merchantName?: string;
   category?: string;
+  toAddress?: string;
   metadata?: Record<string, any>;
 }
 
