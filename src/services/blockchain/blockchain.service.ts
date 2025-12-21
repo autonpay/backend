@@ -55,17 +55,23 @@ export class BlockchainService {
     try {
       // 1. Resolve agent wallet address
       const agent = await this.agentService.getAgent(transaction.agentId);
-      const agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
+      let agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
 
       if (!agentWalletAddress) {
         throw new BlockchainError('Agent wallet address not found');
       }
 
+      // Normalize agent wallet address to checksummed format
+      agentWalletAddress = WalletManager.normalizeAddress(agentWalletAddress);
+
       // 2. Determine recipient address
-      const recipientAddress = this.getRecipientAddress(transaction);
-      if (!ContractClient.isValidAddress(recipientAddress)) {
+      let recipientAddress = this.getRecipientAddress(transaction);
+      if (!WalletManager.isValidAddress(recipientAddress)) {
         throw new BlockchainError(`Invalid recipient address: ${recipientAddress}`);
       }
+
+      // Normalize recipient address to checksummed format
+      recipientAddress = WalletManager.normalizeAddress(recipientAddress);
 
       // 3. Convert amount to token units (USDC has 6 decimals)
       const tokenAddress = this.contractClient.getUSDCAddress();
