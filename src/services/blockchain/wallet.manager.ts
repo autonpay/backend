@@ -4,7 +4,7 @@
  * Manages hot wallet and agent wallet operations.
  */
 
-import { createWalletClient, http, type WalletClient, type PrivateKeyAccount } from 'viem';
+import { createWalletClient, http, type WalletClient, type PrivateKeyAccount, getAddress, isAddress } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../../shared/config';
@@ -113,10 +113,29 @@ export class WalletManager {
   }
 
   /**
-   * Validate wallet address format
+   * Validate wallet address format using viem
+   * Checks both format and checksum validity
    */
   static isValidAddress(address: string): boolean {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
+    try {
+      return isAddress(address);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Normalize address to checksummed format
+   * This ensures the address matches EIP-55 checksum requirements
+   */
+  static normalizeAddress(address: string): string {
+    try {
+      return getAddress(address);
+    } catch (error) {
+      throw new BlockchainError(
+        `Invalid address format: ${address}. ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 
   /**
