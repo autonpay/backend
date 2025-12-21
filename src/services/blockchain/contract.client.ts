@@ -7,6 +7,7 @@
 import { type PublicClient, type WalletClient, encodeFunctionData, parseUnits } from 'viem';
 import { logger } from '../../shared/logger';
 import { BlockchainError } from '../../shared/errors';
+import { WalletManager } from './wallet.manager';
 
 // Standard ERC20 ABI (minimal for transfer)
 const ERC20_ABI = [
@@ -153,10 +154,10 @@ export class ContractClient {
   }
 
   /**
-   * Validate wallet address format
+   * Validate wallet address format using viem
    */
   static isValidAddress(address: string): boolean {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
+    return WalletManager.isValidAddress(address);
   }
 
   /**
