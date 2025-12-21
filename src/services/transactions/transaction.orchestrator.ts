@@ -19,7 +19,7 @@ import { BlockchainService } from '../blockchain';
 import { WebhookService } from '../webhooks';
 import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
-import { InsufficientBalanceError, RuleViolationError } from '../../shared/errors';
+import { InsufficientBalanceError, RuleViolationError, getErrorDetails, isRetryableError } from '../../shared/errors';
 import { queueTransaction } from '../../queues/transaction.queue';
 
 export class TransactionOrchestrator {
@@ -237,24 +237,50 @@ export class TransactionOrchestrator {
 
       logger.info({ transactionId }, 'Transaction completed successfully');
     } catch (error) {
-      logger.error({ transactionId, err: error }, 'Transaction processing failed');
+      const errorDetails = getErrorDetails(error);
+      const retryable = isRetryableError(error);
 
-      // Update status to FAILED
-      await this.repository.updateStatus(transactionId, TransactionStatus.FAILED, {
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      logger.error(
+        {
+          transactionId,
+          err: error,
+          errorType: errorDetails.type,
+          errorCode: errorDetails.code,
+          retryable,
+        },
+        'Transaction processing failed'
+      );
+
+      // Determine final status based on error type
+      // If retryable, keep as PROCESSING (will be retried by worker)
+      // If not retryable, mark as FAILED
+      const finalStatus = retryable ? TransactionStatus.PROCESSING : TransactionStatus.FAILED;
+
+      // Update status
+      await this.repository.updateStatus(transactionId, finalStatus, {
+        errorMessage: errorDetails.message,
       });
 
       // Get updated transaction for webhook
       const failedTransaction = await this.getTransaction(transactionId);
 
-      // Trigger webhook
-      if (this.webhookService) {
-        await this.webhookService.triggerTransactionFailed(
-          failedTransaction,
-          error instanceof Error ? error : new Error('Unknown error')
-        );
+      // Trigger webhook only for non-retryable errors (permanent failures)
+      if (!retryable && this.webhookService) {
+        try {
+          await this.webhookService.triggerTransactionFailed(
+            failedTransaction,
+            error instanceof Error ? error : new Error('Unknown error')
+          );
+        } catch (webhookError) {
+          // Don't fail the transaction if webhook fails
+          logger.error(
+            { transactionId, err: webhookError },
+            'Failed to trigger transaction failed webhook'
+          );
+        }
       }
 
+      // Re-throw error so worker can decide on retry
       throw error;
     }
   }
