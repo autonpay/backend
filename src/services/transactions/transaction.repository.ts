@@ -86,6 +86,7 @@ export class TransactionRepository {
         merchantId: input.merchantId || null,
         merchantName: input.merchantName || null,
         category: input.category || null,
+        toAddress: input.toAddress || null,
         status: input.status,
         paymentMethod: input.paymentMethod || PaymentMethod.ONCHAIN,
         requiresApproval: input.requiresApproval,
