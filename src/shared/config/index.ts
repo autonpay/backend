@@ -25,6 +25,11 @@ export const config = {
     walletPrivateKey: process.env.WALLET_PRIVATE_KEY || '',
     agentWalletFactoryAddress: process.env.AGENT_WALLET_FACTORY_ADDRESS || '',
     spendingRulesAddress: process.env.SPENDING_RULES_ADDRESS || '',
+    // Test token address for development/testing (deploy your own ERC20 token)
+    testTokenAddress: process.env.TEST_TOKEN_ADDRESS || '',
+    // Skip blockchain operations (for testing without blockchain setup)
+    // Set SKIP_BLOCKCHAIN=true in .env to skip blockchain, or it will auto-skip in development
+    skipBlockchain: process.env.SKIP_BLOCKCHAIN === 'true' || (process.env.NODE_ENV || 'development') === 'development',
   },
 
   // x402
