@@ -7,6 +7,7 @@
 
 import { logger } from '../../shared/logger';
 import { BlockchainError } from '../../shared/errors';
+import { config } from '../../shared/config';
 import { Transaction } from '../transactions/transaction.types';
 import { AgentService } from '../agents';
 import { WalletManager } from './wallet.manager';
@@ -22,6 +23,22 @@ import {
   TransactionStatus as BlockchainTxStatus,
 } from './blockchain.types';
 
+/**
+ * Get the blockchain network based on environment
+ * - development/staging: Use Base Sepolia (testnet)
+ * - production: Use Base Mainnet
+ */
+function getNetworkForEnvironment(): BlockchainNetwork {
+  const env = config.env.toLowerCase();
+
+  if (env === 'production') {
+    return BlockchainNetwork.BASE_MAINNET;
+  }
+
+  // Default to testnet for development and staging
+  return BlockchainNetwork.BASE_SEPOLIA;
+}
+
 export class BlockchainService {
   private walletManager: WalletManager;
   private gasEstimator: GasEstimator;
@@ -32,9 +49,15 @@ export class BlockchainService {
 
   constructor(
     private agentService: AgentService,
-    network: BlockchainNetwork = BlockchainNetwork.BASE_MAINNET
+    network?: BlockchainNetwork
   ) {
-    this.network = network;
+    // Use provided network or auto-detect based on environment
+    this.network = network || getNetworkForEnvironment();
+
+    logger.info(
+      { network: this.network, environment: config.env },
+      'Initializing BlockchainService'
+    );
     this.walletManager = new WalletManager(network);
     this.gasEstimator = new GasEstimator(network);
     this.transactionMonitor = new TransactionMonitor(this.gasEstimator.getPublicClient());
@@ -105,16 +128,47 @@ export class BlockchainService {
     amount: bigint,
     tokenAddress: `0x${string}`
   ): Promise<ExecuteSpendResult> {
-    logger.info(
-      {
-        transactionId: transaction.id,
-        from: fromAddress,
-        to: toAddress,
-        amount: amount.toString(),
-        token: tokenAddress,
-      },
-      'Executing direct token transfer'
-    );
+      logger.info(
+        {
+          transactionId: transaction.id,
+          from: fromAddress,
+          to: toAddress,
+          amount: amount.toString(),
+          token: tokenAddress,
+        },
+        'Executing direct token transfer'
+      );
+
+    // Check on-chain balance before attempting transfer
+    // If balance check fails (e.g., contract doesn't exist), log warning but continue
+    // This allows development on networks where USDC might not be deployed
+    try {
+      const onChainBalance = await this.contractClient.getTokenBalance(
+        tokenAddress as `0x${string}`,
+        fromAddress as `0x${string}`
+      );
+
+      if (onChainBalance < amount) {
+        const balanceFormatted = ContractClient.formatTokenAmount(onChainBalance, 6);
+        const amountFormatted = ContractClient.formatTokenAmount(amount, 6);
+        throw new BlockchainError(
+          `Insufficient on-chain balance. Available: ${balanceFormatted} USDC, Required: ${amountFormatted} USDC. ` +
+          `Please fund wallet ${fromAddress} with USDC tokens.`
+        );
+      }
+    } catch (error) {
+      // If balance check fails due to contract not existing, log and continue
+      // This allows testing on networks where the token contract might not be deployed
+      if (error instanceof BlockchainError && error.message.includes('contract not found')) {
+        logger.warn(
+          { tokenAddress, fromAddress, error: error.message },
+          'Token contract not found on network - balance check skipped. Transaction will proceed but may fail.'
+        );
+      } else {
+        // Re-throw if it's a different error (e.g., insufficient balance)
+        throw error;
+      }
+    }
 
     // Estimate gas
     const gasEstimate = await this.estimateGasForTransfer(tokenAddress, toAddress, amount, fromAddress);
