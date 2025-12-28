@@ -8,6 +8,7 @@
 import { prisma } from '../../database/client';
 import { Transaction, CreateTransactionInput, TransactionStatus, PaymentMethod } from './transaction.types';
 import { subDays, subWeeks, subMonths, subHours } from 'date-fns';
+import { config } from '../../shared/config';
 
 export interface ListTransactionsQuery {
   organizationId: string;
@@ -77,6 +78,15 @@ export class TransactionRepository {
     requiresApproval: boolean;
     paymentMethod?: PaymentMethod;
   }): Promise<Transaction> {
+    // Determine blockchain network based on environment
+    // This is set at creation time so we know what network we're targeting
+    const blockchainNetwork =
+      input.paymentMethod === PaymentMethod.ONCHAIN
+        ? config.env === 'production'
+          ? 'base-mainnet'
+          : 'base-sepolia'
+        : null;
+
     const transaction = await prisma.transaction.create({
       data: {
         organizationId: input.organizationId,
@@ -91,6 +101,7 @@ export class TransactionRepository {
         paymentMethod: input.paymentMethod || PaymentMethod.ONCHAIN,
         requiresApproval: input.requiresApproval,
         metadata: input.metadata || {},
+        blockchainNetwork,
       },
     });
 
