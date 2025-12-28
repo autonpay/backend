@@ -158,7 +158,7 @@ model Transaction {
   status            String    @default("pending") // pending, pending_approval, processing, completed, failed, rejected
   paymentMethod     String    @map("payment_method") // onchain, card
   blockchainTxHash  String?   @map("blockchain_tx_hash")
-  blockchainNetwork String?   @default("base-mainnet") @map("blockchain_network")
+  blockchainNetwork String?   @map("blockchain_network")
   fromAddress       String?   @map("from_address")
   toAddress         String?   @map("to_address")
   requiresApproval  Boolean   @default(false) @map("requires_approval")
