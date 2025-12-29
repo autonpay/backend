@@ -41,6 +41,4 @@ if (queues.length > 0) {
   logger.warn('No queues available for dashboard (Redis may be unavailable)');
 }
 
-logger.info('Queue dashboard available at /admin/queues');
-
 export default router;
