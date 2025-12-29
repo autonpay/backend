@@ -9,11 +9,34 @@ async function bootstrap() {
 
     // Optionally start workers (if ENABLE_WORKER=true)
     let workerShutdown: (() => Promise<void>)[] = [];
+    let schedulerShutdown: (() => void) | null = null;
+
     if (process.env.ENABLE_WORKER === 'true') {
       const { shutdownWorker } = await import('./workers/transaction.worker');
       const { shutdownWebhookWorker } = await import('./workers/webhook.worker');
       workerShutdown = [shutdownWorker, shutdownWebhookWorker];
       logger.info('Transaction and webhook workers started');
+
+      // Start approval expiration scheduler
+      const { ApprovalScheduler } = await import('./services/approvals');
+      const { ApprovalRepository } = await import('./services/approvals');
+      const { TransactionRepository } = await import('./services/transactions');
+      const { container } = await import('./services/container');
+
+      const approvalScheduler = new ApprovalScheduler(
+        new ApprovalRepository(),
+        new TransactionRepository(),
+        container.webhookService
+      );
+
+      // Start scheduler (runs every hour by default, configurable via env)
+      const intervalMs = process.env.APPROVAL_EXPIRATION_CHECK_INTERVAL_MS
+        ? parseInt(process.env.APPROVAL_EXPIRATION_CHECK_INTERVAL_MS, 10)
+        : 60 * 60 * 1000; // Default: 1 hour
+
+      approvalScheduler.start(intervalMs);
+      schedulerShutdown = () => approvalScheduler.stop();
+      logger.info({ intervalMs }, 'Approval expiration scheduler started');
     }
 
     const server = app.listen(config.port, () => {
@@ -28,7 +51,12 @@ async function bootstrap() {
     const shutdown = async () => {
       logger.info('Shutting down gracefully...');
 
-      // Shutdown workers first
+      // Stop scheduler first
+      if (schedulerShutdown) {
+        schedulerShutdown();
+      }
+
+      // Shutdown workers
       if (workerShutdown.length > 0) {
         await Promise.all(workerShutdown.map(shutdown => shutdown()));
       }

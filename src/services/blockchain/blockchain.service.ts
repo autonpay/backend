@@ -46,11 +46,14 @@ export class BlockchainService {
   private contractClient: ContractClient;
   private x402Client: X402Client;
   private network: BlockchainNetwork;
+  private merchantService?: any; // MerchantService - using any to avoid circular dependency
 
   constructor(
     private agentService: AgentService,
-    network?: BlockchainNetwork
+    network?: BlockchainNetwork,
+    merchantService?: any // Optional merchant service for address resolution
   ) {
+    this.merchantService = merchantService;
     // Use provided network or auto-detect based on environment
     this.network = network || getNetworkForEnvironment();
 
@@ -87,8 +90,8 @@ export class BlockchainService {
       // Normalize agent wallet address to checksummed format
       agentWalletAddress = WalletManager.normalizeAddress(agentWalletAddress);
 
-      // 2. Determine recipient address
-      let recipientAddress = this.getRecipientAddress(transaction);
+      // 2. Determine recipient address (async - may need to resolve from merchant)
+      let recipientAddress = await this.getRecipientAddress(transaction);
       if (!WalletManager.isValidAddress(recipientAddress)) {
         throw new BlockchainError(`Invalid recipient address: ${recipientAddress}`);
       }
@@ -280,7 +283,7 @@ export class BlockchainService {
     try {
       const agent = await this.agentService.getAgent(transaction.agentId);
       const agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
-      const recipientAddress = this.getRecipientAddress(transaction);
+      const recipientAddress = await this.getRecipientAddress(transaction);
       const tokenAddress = this.contractClient.getUSDCAddress();
       const amount = ContractClient.parseTokenAmount(transaction.amount.toString(), 6);
 
@@ -352,8 +355,8 @@ export class BlockchainService {
   /**
    * Get recipient address from transaction
    */
-  private getRecipientAddress(transaction: Transaction): string {
-    // Priority: toAddress > metadata.recipientAddress > merchantId (for x402)
+  private async getRecipientAddress(transaction: Transaction): Promise<string> {
+    // Priority: toAddress > metadata.recipientAddress > merchantId
     if (transaction.toAddress) {
       return transaction.toAddress;
     }
@@ -362,10 +365,25 @@ export class BlockchainService {
       return transaction.metadata.recipientAddress;
     }
 
-    // For merchant payments, x402 will handle recipient resolution
+    // For merchant payments, resolve wallet address from merchant record
     if (transaction.merchantId) {
-      // Return placeholder - x402 will resolve actual recipient
-      return '0x0000000000000000000000000000000000000000';
+      if (!this.merchantService) {
+        throw new BlockchainError(
+          'Merchant service not available. Cannot resolve merchant wallet address.'
+        );
+      }
+
+      try {
+        const walletAddress = await this.merchantService.getMerchantWalletAddress(
+          transaction.merchantId
+        );
+        return walletAddress;
+      } catch (error) {
+        throw new BlockchainError(
+          `Failed to resolve merchant wallet address: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          { merchantId: transaction.merchantId, error }
+        );
+      }
     }
 
     throw new BlockchainError('Recipient address not specified in transaction');
