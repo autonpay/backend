@@ -14,6 +14,7 @@ import Redis from 'ioredis';
 const connection = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
   lazyConnect: true, // Don't connect immediately
+  enableReadyCheck: false, // Don't wait for ready state
   retryStrategy: (times) => {
     // Retry with exponential backoff, max 3 seconds
     const delay = Math.min(times * 50, 3000);
@@ -27,6 +28,11 @@ const connection = new Redis(config.redisUrl, {
     }
     return false;
   },
+});
+
+// Handle connection errors gracefully
+connection.on('error', (err) => {
+  logger.warn({ err }, 'Redis connection error (queue operations may fail)');
 });
 
 export interface TransactionJobData {
@@ -82,6 +88,9 @@ transactionQueue.on('error', (error) => {
 
 /**
  * Add transaction to processing queue with dynamic retry configuration
+ *
+ * This function will not throw errors - it handles Redis connection failures gracefully
+ * to ensure transaction creation can succeed even when Redis is unavailable.
  */
 export async function queueTransaction(data: TransactionJobData): Promise<void> {
   try {
@@ -95,18 +104,28 @@ export async function queueTransaction(data: TransactionJobData): Promise<void> 
       },
     };
 
+    // Try to add job to queue
+    // This may fail if Redis is not available, but we catch and log the error
     await transactionQueue.add('process-transaction', data, defaultOptions);
 
     logger.info({ transactionId: data.transactionId }, 'Transaction queued for processing');
-  } catch (error) {
-    // If Redis is unavailable, log the error but don't throw
+  } catch (error: any) {
+    // If Redis is unavailable or any other error occurs, log it but don't throw
     // This allows transactions to be created even when Redis is down
-    // The caller (orchestrator) will handle this gracefully
+    // The transaction is already saved to the database, so we can process it later
+    const errorMessage = error?.message || String(error);
+    const errorName = error?.name || 'UnknownError';
+
     logger.error(
-      { transactionId: data.transactionId, err: error },
-      'Failed to add transaction to queue. Transaction will need to be processed manually or when Redis is available.'
+      {
+        transactionId: data.transactionId,
+        err: error,
+        errorName,
+        errorMessage,
+      },
+      'Failed to add transaction to queue. Transaction created but may need manual processing when Redis is available.'
     );
-    // Don't re-throw - let the orchestrator handle it gracefully
+    // Silently fail - don't throw error
     // This ensures transaction creation succeeds even if queueing fails
   }
 }
