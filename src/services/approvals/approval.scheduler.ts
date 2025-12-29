@@ -13,7 +13,6 @@
 
 import { logger } from '../../shared/logger';
 import { ApprovalRepository } from './approval.repository';
-import { ApprovalStatus } from './approval.types';
 import { TransactionRepository } from '../transactions/transaction.repository';
 import { TransactionStatus } from '../transactions/transaction.types';
 import { WebhookService } from '../webhooks';
