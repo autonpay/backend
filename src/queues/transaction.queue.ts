@@ -10,8 +10,23 @@ import { logger } from '../shared/logger';
 import Redis from 'ioredis';
 
 // Create Redis connection for BullMQ
+// Use lazyConnect to avoid immediate connection attempts
 const connection = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
+  lazyConnect: true, // Don't connect immediately
+  retryStrategy: (times) => {
+    // Retry with exponential backoff, max 3 seconds
+    const delay = Math.min(times * 50, 3000);
+    return delay;
+  },
+  reconnectOnError: (err) => {
+    // Reconnect on connection errors
+    const targetError = 'READONLY';
+    if (err.message.includes(targetError)) {
+      return true;
+    }
+    return false;
+  },
 });
 
 export interface TransactionJobData {
