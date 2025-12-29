@@ -11,6 +11,7 @@ import rulesRoutes from './routes/rules.routes';
 import transactionRoutes from './routes/transactions.routes';
 import webhookRoutes from './routes/webhooks.routes';
 import approvalRoutes from './routes/approvals.routes';
+import merchantRoutes from './routes/merchants.routes';
 
 export function registerRoutes(app: Application) {
   const v1Router = Router();
@@ -47,6 +48,9 @@ export function registerRoutes(app: Application) {
   // Approval routes
   v1Router.use('/approvals', approvalRoutes);
 
+  // Merchant routes
+  v1Router.use('/merchants', merchantRoutes);
+
   // API info endpoint
   v1Router.get('/', (res: Response) => {
     return responses.ok(res, {
@@ -61,6 +65,7 @@ export function registerRoutes(app: Application) {
         transactions: '/v1/transactions',
         webhooks: '/v1/webhooks',
         approvals: '/v1/approvals',
+        merchants: '/v1/merchants',
       },
     });
   });
