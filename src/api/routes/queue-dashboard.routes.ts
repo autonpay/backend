@@ -9,6 +9,7 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { transactionQueue, deadLetterQueue } from '../../queues/transaction.queue';
+import { webhookQueue } from '../../queues/webhook.queue';
 import { logger } from '../../shared/logger';
 
 const router = Router();
@@ -20,6 +21,7 @@ createBullBoard({
   queues: [
     new BullMQAdapter(transactionQueue),
     new BullMQAdapter(deadLetterQueue),
+    new BullMQAdapter(webhookQueue),
   ],
   serverAdapter,
 });
