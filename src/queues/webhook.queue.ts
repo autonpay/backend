@@ -84,6 +84,22 @@ try {
 export { webhookQueue };
 
 /**
+ * Close webhook queue connection
+ * Used for graceful shutdown and test cleanup
+ */
+export async function closeWebhookQueue(): Promise<void> {
+  try {
+    if (webhookQueue) {
+      await webhookQueue.close();
+    }
+    await connection.quit();
+    logger.debug('Webhook queue closed');
+  } catch (error) {
+    logger.warn({ err: error }, 'Error closing webhook queue');
+  }
+}
+
+/**
  * Add webhook delivery job to queue
  * This function will not throw errors - it handles Redis connection failures gracefully
  */
