@@ -10,6 +10,7 @@ import agentRoutes from './routes/agents.routes';
 import rulesRoutes from './routes/rules.routes';
 import transactionRoutes from './routes/transactions.routes';
 import webhookRoutes from './routes/webhooks.routes';
+import approvalRoutes from './routes/approvals.routes';
 
 export function registerRoutes(app: Application) {
   const v1Router = Router();
@@ -43,6 +44,9 @@ export function registerRoutes(app: Application) {
   // Webhook routes
   v1Router.use('/webhooks', webhookRoutes);
 
+  // Approval routes
+  v1Router.use('/approvals', approvalRoutes);
+
   // API info endpoint
   v1Router.get('/', (res: Response) => {
     return responses.ok(res, {
@@ -56,6 +60,7 @@ export function registerRoutes(app: Application) {
         rules: '/v1/rules',
         transactions: '/v1/transactions',
         webhooks: '/v1/webhooks',
+        approvals: '/v1/approvals',
       },
     });
   });
