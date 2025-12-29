@@ -17,6 +17,7 @@ import { RulesService, SpendRequest } from '../rules';
 import { LedgerService } from '../ledger';
 import { BlockchainService } from '../blockchain';
 import { WebhookService } from '../webhooks';
+import { ApprovalService } from '../approvals';
 import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
 import { InsufficientBalanceError, RuleViolationError, getErrorDetails, isRetryableError } from '../../shared/errors';
@@ -30,7 +31,8 @@ export class TransactionOrchestrator {
     private rulesService: RulesService,
     private ledgerService: LedgerService,
     private blockchainService?: BlockchainService,
-    private webhookService?: WebhookService
+    private webhookService?: WebhookService,
+    private approvalService?: ApprovalService
   ) {}
 
   /**
@@ -94,9 +96,27 @@ export class TransactionOrchestrator {
 
     // Step 5: Either queue for processing or create approval
     if (ruleResult.requiresApproval) {
-      // TODO: Create approval request
-      // await this.approvalService.createApproval(transaction);
-      logger.info({ transactionId: transaction.id }, 'Transaction requires approval');
+      // Create approval request
+      if (this.approvalService) {
+        // Determine required approvers from rule conditions or use default
+        const requiredApprovers = ruleResult.violatedRule?.conditions?.requiredApprovers || 1;
+
+        // Optional: Set expiration from rule conditions (default: 7 days)
+        const expiresAt = ruleResult.violatedRule?.conditions?.approvalExpirationDays
+          ? new Date(Date.now() + ruleResult.violatedRule.conditions.approvalExpirationDays * 24 * 60 * 60 * 1000)
+          : undefined;
+
+        await this.approvalService.createApproval({
+          transactionId: transaction.id,
+          organizationId: agent.organizationId,
+          requiredApprovers,
+          expiresAt,
+        });
+
+        logger.info({ transactionId: transaction.id }, 'Approval request created');
+      } else {
+        logger.warn({ transactionId: transaction.id }, 'Approval service not available, transaction requires approval but cannot create approval request');
+      }
     } else {
       // Queue for background processing
       // queueTransaction handles errors gracefully and won't throw

@@ -122,5 +122,59 @@ export class WebhookService {
       createdAt: transaction.createdAt,
     }, transaction.organizationId);
   }
+
+  /**
+   * Trigger approval created webhook
+   */
+  async triggerApprovalCreated(approval: { id: string; transactionId: string; organizationId: string; status: string; requiredApprovers: number; expiresAt: Date | null }): Promise<void> {
+    await this.trigger('approval.created', {
+      id: approval.id,
+      transactionId: approval.transactionId,
+      organizationId: approval.organizationId,
+      status: approval.status,
+      requiredApprovers: approval.requiredApprovers,
+      expiresAt: approval.expiresAt,
+      createdAt: new Date(),
+    }, approval.organizationId);
+  }
+
+  /**
+   * Trigger approval approved webhook
+   */
+  async triggerApprovalApproved(approval: { id: string; transactionId: string; organizationId: string; currentApprovers: number; requiredApprovers: number }): Promise<void> {
+    await this.trigger('approval.approved', {
+      id: approval.id,
+      transactionId: approval.transactionId,
+      organizationId: approval.organizationId,
+      currentApprovers: approval.currentApprovers,
+      requiredApprovers: approval.requiredApprovers,
+      approvedAt: new Date(),
+    }, approval.organizationId);
+  }
+
+  /**
+   * Trigger approval rejected webhook
+   */
+  async triggerApprovalRejected(approval: { id: string; transactionId: string; organizationId: string; rejectionReason?: string }): Promise<void> {
+    await this.trigger('approval.rejected', {
+      id: approval.id,
+      transactionId: approval.transactionId,
+      organizationId: approval.organizationId,
+      rejectionReason: approval.rejectionReason,
+      rejectedAt: new Date(),
+    }, approval.organizationId);
+  }
+
+  /**
+   * Trigger approval expired webhook
+   */
+  async triggerApprovalExpired(approval: { id: string; transactionId: string; organizationId: string }): Promise<void> {
+    await this.trigger('approval.expired', {
+      id: approval.id,
+      transactionId: approval.transactionId,
+      organizationId: approval.organizationId,
+      expiredAt: new Date(),
+    }, approval.organizationId);
+  }
 }
 

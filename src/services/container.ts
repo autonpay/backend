@@ -18,6 +18,7 @@ import { AuthService } from './auth';
 import { BlockchainService } from './blockchain';
 import { WebhookService } from './webhooks';
 import { WebhookRepository } from './webhooks/webhook.repository';
+import { ApprovalService, ApprovalRepository } from './approvals';
 import { config } from '../shared/config';
 import { logger } from '../shared/logger';
 
@@ -40,6 +41,8 @@ class ServiceContainer {
   private _blockchainService?: BlockchainService;
   private _webhookRepository?: WebhookRepository;
   private _webhookService?: WebhookService;
+  private _approvalRepository?: ApprovalRepository;
+  private _approvalService?: ApprovalService;
   private _transactionOrchestrator?: TransactionOrchestrator;
 
   private constructor() {}
@@ -164,6 +167,31 @@ class ServiceContainer {
   }
 
   /**
+   * Get Approval Repository
+   */
+  get approvalRepository(): ApprovalRepository {
+    if (!this._approvalRepository) {
+      this._approvalRepository = new ApprovalRepository();
+    }
+    return this._approvalRepository;
+  }
+
+  /**
+   * Get Approval Service
+   */
+  get approvalService(): ApprovalService {
+    if (!this._approvalService) {
+      const transactionRepository = new TransactionRepository();
+      this._approvalService = new ApprovalService(
+        this.approvalRepository,
+        transactionRepository,
+        this.webhookService
+      );
+    }
+    return this._approvalService;
+  }
+
+  /**
    * Get Transaction Orchestrator
    */
   get transactionOrchestrator(): TransactionOrchestrator {
@@ -175,7 +203,8 @@ class ServiceContainer {
         this.rulesService,
         this.ledgerService,
         this.blockchainService,
-        this.webhookService
+        this.webhookService,
+        this.approvalService
       );
     }
     return this._transactionOrchestrator;
@@ -194,6 +223,8 @@ class ServiceContainer {
     this._blockchainService = undefined;
     this._webhookRepository = undefined;
     this._webhookService = undefined;
+    this._approvalRepository = undefined;
+    this._approvalService = undefined;
     this._transactionOrchestrator = undefined;
   }
 }

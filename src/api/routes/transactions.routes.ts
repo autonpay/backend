@@ -142,5 +142,56 @@ router.get(
   }
 );
 
+/**
+ * @swagger
+ * /v1/transactions/{id}/approval:
+ *   get:
+ *     summary: Get approval for a transaction
+ *     tags: [Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *       - apiKey: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Approval details (or null if no approval exists)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Transaction not found
+ */
+router.get(
+  '/:id/approval',
+  validate({ params: transactionIdParamsSchema }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id: transactionId } = req.params as { id: string };
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
+
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
+      // Verify transaction ownership first
+      await container.transactionOrchestrator.verifyOwnership(transactionId, organizationId);
+
+      const approval = await container.approvalService.getApprovalByTransaction(
+        transactionId,
+        organizationId
+      );
+
+      return responses.ok(res, approval, 'Approval retrieved successfully');
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 export default router;
 
