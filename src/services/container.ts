@@ -18,6 +18,8 @@ import { AuthService } from './auth';
 import { BlockchainService } from './blockchain';
 import { WebhookService } from './webhooks';
 import { WebhookRepository } from './webhooks/webhook.repository';
+import { config } from '../shared/config';
+import { logger } from '../shared/logger';
 
 /**
  * Service Container
@@ -121,10 +123,22 @@ class ServiceContainer {
 
   /**
    * Get Blockchain Service
+   * Returns undefined if blockchain is disabled (skipBlockchain=true)
    */
-  get blockchainService(): BlockchainService {
+  get blockchainService(): BlockchainService | undefined {
+    // Skip blockchain service initialization if blockchain is disabled
+    if (config.blockchain.skipBlockchain) {
+      logger.debug('Blockchain service skipped (skipBlockchain=true)');
+      return undefined;
+    }
+
     if (!this._blockchainService) {
-      this._blockchainService = new BlockchainService(this.agentService);
+      try {
+        this._blockchainService = new BlockchainService(this.agentService);
+      } catch (error) {
+        logger.error({ err: error }, 'Failed to initialize BlockchainService. Blockchain operations will be disabled.');
+        return undefined;
+      }
     }
     return this._blockchainService;
   }
