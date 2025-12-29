@@ -7,6 +7,8 @@
 import { type PublicClient, type WalletClient, encodeFunctionData, parseUnits } from 'viem';
 import { logger } from '../../shared/logger';
 import { BlockchainError } from '../../shared/errors';
+import { WalletManager } from './wallet.manager';
+import { config } from '../../shared/config';
 
 // Standard ERC20 ABI (minimal for transfer)
 const ERC20_ABI = [
@@ -43,8 +45,21 @@ export class ContractClient {
 
   /**
    * Get USDC token address for current network
+   *
+   * In development, if TEST_TOKEN_ADDRESS is set, use that instead.
+   * This allows using a custom test ERC20 token for development.
    */
   getUSDCAddress(): `0x${string}` {
+    // In development, prefer test token if configured
+    if (config.env !== 'production' && config.blockchain.testTokenAddress) {
+      logger.debug(
+        { testTokenAddress: config.blockchain.testTokenAddress, network: this.network },
+        'Using test token address for development'
+      );
+      return config.blockchain.testTokenAddress as `0x${string}`;
+    }
+
+    // Use standard USDC addresses for production/testnet
     return this.network === 'base-mainnet' ? USDC_BASE_MAINNET : USDC_BASE_SEPOLIA;
   }
 
@@ -53,6 +68,14 @@ export class ContractClient {
    */
   async getTokenBalance(tokenAddress: `0x${string}`, address: `0x${string}`): Promise<bigint> {
     try {
+      // First check if the address is a contract
+      const code = await this.publicClient.getBytecode({ address: tokenAddress });
+      if (!code || code === '0x') {
+        throw new BlockchainError(
+          `Token contract not found at address ${tokenAddress}. This address may not be a contract on the current network.`
+        );
+      }
+
       const balance = await this.publicClient.readContract({
         address: tokenAddress,
         abi: ERC20_ABI,
@@ -63,8 +86,16 @@ export class ContractClient {
       return balance as bigint;
     } catch (error) {
       logger.error({ err: error, tokenAddress, address }, 'Failed to get token balance');
+
+      // Provide more helpful error messages
+      if (error instanceof BlockchainError) {
+        throw error;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BlockchainError(
-        `Failed to get token balance: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to get token balance: ${errorMessage}. ` +
+        `This may indicate that the token contract (${tokenAddress}) doesn't exist on the current network.`,
         { tokenAddress, address, error }
       );
     }
@@ -153,10 +184,10 @@ export class ContractClient {
   }
 
   /**
-   * Validate wallet address format
+   * Validate wallet address format using viem
    */
   static isValidAddress(address: string): boolean {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
+    return WalletManager.isValidAddress(address);
   }
 
   /**

@@ -8,6 +8,7 @@ import { errorHandler } from './api/middleware/error-handler';
 import { requestLogger } from './api/middleware/request-logger';
 import { registerRoutes } from './api/routes';
 import { swaggerSpec } from './api/swagger';
+import queueDashboardRoutes from './api/routes/queue-dashboard.routes';
 
 export async function createServer(): Promise<Application> {
   const app = express();
@@ -46,6 +47,9 @@ export async function createServer(): Promise<Application> {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });
+
+  // Queue Dashboard (Bull Board UI)
+  app.use(queueDashboardRoutes);
 
   // API routes
   registerRoutes(app);

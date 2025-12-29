@@ -7,12 +7,13 @@ async function bootstrap() {
   try {
     const app = await createServer();
 
-    // Optionally start transaction worker (if ENABLE_WORKER=true)
-    let workerShutdown: (() => Promise<void>) | null = null;
+    // Optionally start workers (if ENABLE_WORKER=true)
+    let workerShutdown: (() => Promise<void>)[] = [];
     if (process.env.ENABLE_WORKER === 'true') {
-      const { shutdownWorker } = await import('./workers');
-      workerShutdown = shutdownWorker;
-      logger.info('Transaction worker started');
+      const { shutdownWorker } = await import('./workers/transaction.worker');
+      const { shutdownWebhookWorker } = await import('./workers/webhook.worker');
+      workerShutdown = [shutdownWorker, shutdownWebhookWorker];
+      logger.info('Transaction and webhook workers started');
     }
 
     const server = app.listen(config.port, () => {
@@ -20,16 +21,16 @@ async function bootstrap() {
       logger.info(`Environment: ${config.env}`);
       logger.info(`API Base URL: ${config.apiBaseUrl}`);
       if (process.env.ENABLE_WORKER === 'true') {
-        logger.info('Transaction worker is active');
+        logger.info('Transaction and webhook workers are active');
       }
     });
 
     const shutdown = async () => {
       logger.info('Shutting down gracefully...');
 
-      // Shutdown worker first
-      if (workerShutdown) {
-        await workerShutdown();
+      // Shutdown workers first
+      if (workerShutdown.length > 0) {
+        await Promise.all(workerShutdown.map(shutdown => shutdown()));
       }
 
       server.close(() => {

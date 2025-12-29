@@ -17,6 +17,9 @@ import { UserService, UserRepository } from './users';
 import { AuthService } from './auth';
 import { BlockchainService } from './blockchain';
 import { WebhookService } from './webhooks';
+import { WebhookRepository } from './webhooks/webhook.repository';
+import { config } from '../shared/config';
+import { logger } from '../shared/logger';
 
 /**
  * Service Container
@@ -35,6 +38,7 @@ class ServiceContainer {
   private _rulesService?: RulesService;
   private _ledgerService?: LedgerService;
   private _blockchainService?: BlockchainService;
+  private _webhookRepository?: WebhookRepository;
   private _webhookService?: WebhookService;
   private _transactionOrchestrator?: TransactionOrchestrator;
 
@@ -119,12 +123,34 @@ class ServiceContainer {
 
   /**
    * Get Blockchain Service
+   * Returns undefined if blockchain is disabled (skipBlockchain=true)
    */
-  get blockchainService(): BlockchainService {
+  get blockchainService(): BlockchainService | undefined {
+    // Skip blockchain service initialization if blockchain is disabled
+    if (config.blockchain.skipBlockchain) {
+      logger.debug('Blockchain service skipped (skipBlockchain=true)');
+      return undefined;
+    }
+
     if (!this._blockchainService) {
-      this._blockchainService = new BlockchainService(this.agentService);
+      try {
+        this._blockchainService = new BlockchainService(this.agentService);
+      } catch (error) {
+        logger.error({ err: error }, 'Failed to initialize BlockchainService. Blockchain operations will be disabled.');
+        return undefined;
+      }
     }
     return this._blockchainService;
+  }
+
+  /**
+   * Get Webhook Repository
+   */
+  get webhookRepository(): WebhookRepository {
+    if (!this._webhookRepository) {
+      this._webhookRepository = new WebhookRepository();
+    }
+    return this._webhookRepository;
   }
 
   /**
@@ -132,7 +158,7 @@ class ServiceContainer {
    */
   get webhookService(): WebhookService {
     if (!this._webhookService) {
-      this._webhookService = new WebhookService();
+      this._webhookService = new WebhookService(this.webhookRepository);
     }
     return this._webhookService;
   }
@@ -166,6 +192,7 @@ class ServiceContainer {
     this._rulesService = undefined;
     this._ledgerService = undefined;
     this._blockchainService = undefined;
+    this._webhookRepository = undefined;
     this._webhookService = undefined;
     this._transactionOrchestrator = undefined;
   }

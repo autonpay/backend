@@ -19,8 +19,9 @@ import { BlockchainService } from '../blockchain';
 import { WebhookService } from '../webhooks';
 import { NotFoundError } from '../../shared/errors';
 import { logger } from '../../shared/logger';
-import { InsufficientBalanceError, RuleViolationError } from '../../shared/errors';
+import { InsufficientBalanceError, RuleViolationError, getErrorDetails, isRetryableError } from '../../shared/errors';
 import { queueTransaction } from '../../queues/transaction.queue';
+import { config } from '../../shared/config';
 
 export class TransactionOrchestrator {
   constructor(
@@ -98,6 +99,8 @@ export class TransactionOrchestrator {
       logger.info({ transactionId: transaction.id }, 'Transaction requires approval');
     } else {
       // Queue for background processing
+      // queueTransaction handles errors gracefully and won't throw
+      // Transaction creation will succeed even if Redis is unavailable
       await queueTransaction({
         transactionId: transaction.id,
         organizationId: agent.organizationId,
@@ -105,7 +108,7 @@ export class TransactionOrchestrator {
         amount: transaction.amount,
         currency: transaction.currency,
       });
-      logger.info({ transactionId: transaction.id }, 'Transaction queued for processing');
+      // Note: queueTransaction logs errors internally, so we don't need try-catch here
     }
 
     return transaction;
@@ -175,34 +178,64 @@ export class TransactionOrchestrator {
     try {
       // Determine payment method and route accordingly
       if (transaction.paymentMethod === PaymentMethod.ONCHAIN) {
-        if (!this.blockchainService) {
-          throw new Error('Blockchain service not available');
+        // Skip blockchain operations if configured (for development/testing)
+        if (config.blockchain.skipBlockchain) {
+          logger.warn(
+            { transactionId },
+            'Blockchain operations are disabled (SKIP_BLOCKCHAIN=true or development mode). Simulating successful transaction.'
+          );
+
+          // Generate a mock transaction hash (format: 0x + 64 hex characters)
+          const mockTxHash = `0x${Array.from({ length: 64 }, () =>
+            Math.floor(Math.random() * 16).toString(16)
+          ).join('')}` as `0x${string}`;
+
+          // Use the network that was set at transaction creation time
+          const network = transaction.blockchainNetwork || (config.env === 'production' ? 'base-mainnet' : 'base-sepolia');
+
+          // Update transaction with mock blockchain details
+          await this.repository.update(transactionId, {
+            blockchainTxHash: mockTxHash,
+            blockchainNetwork: network,
+            fromAddress: transaction.fromAddress,
+            toAddress: transaction.toAddress,
+          });
+
+          logger.info(
+            { transactionId, txHash: mockTxHash, network },
+            'On-chain transaction simulated (blockchain disabled)'
+          );
+        } else {
+          // Normal blockchain processing
+          if (!this.blockchainService) {
+            throw new Error('Blockchain service not available');
+          }
+
+          // Execute on-chain transaction
+          const result = await this.blockchainService.executeSpend(transaction);
+
+          // Wait for transaction confirmation (wait for at least 1 confirmation)
+          logger.info({ transactionId, txHash: result.txHash }, 'Waiting for transaction confirmation');
+          const confirmation = await this.blockchainService.waitForConfirmation(result.txHash, 1);
+
+          // Check if transaction was successful
+          if (confirmation.status === 'reverted' || confirmation.status === 'failed') {
+            throw new Error(`Transaction reverted or failed: ${confirmation.status}`);
+          }
+
+          // Update transaction with blockchain details
+          await this.repository.update(transactionId, {
+            blockchainTxHash: result.txHash,
+            blockchainNetwork: result.network,
+            fromAddress: transaction.fromAddress,
+            toAddress: transaction.toAddress,
+          });
+
+          logger.info(
+            { transactionId, txHash: result.txHash, confirmations: confirmation.confirmations },
+            'On-chain transaction confirmed'
+          );
         }
-
-        // Execute on-chain transaction
-        const result = await this.blockchainService.executeSpend(transaction);
-
-        // Wait for transaction confirmation (wait for at least 1 confirmation)
-        logger.info({ transactionId, txHash: result.txHash }, 'Waiting for transaction confirmation');
-        const confirmation = await this.blockchainService.waitForConfirmation(result.txHash, 1);
-
-        // Check if transaction was successful
-        if (confirmation.status === 'reverted' || confirmation.status === 'failed') {
-          throw new Error(`Transaction reverted or failed: ${confirmation.status}`);
-        }
-
-        // Update transaction with blockchain details
-        await this.repository.update(transactionId, {
-          blockchainTxHash: result.txHash,
-          blockchainNetwork: result.network,
-          fromAddress: transaction.fromAddress,
-          toAddress: transaction.toAddress,
-        });
-
-        logger.info(
-          { transactionId, txHash: result.txHash, confirmations: confirmation.confirmations },
-          'On-chain transaction confirmed'
-        );
       } else {
         // TODO: Card payment processing
         logger.debug({ transactionId, paymentMethod: transaction.paymentMethod }, 'Card payment not yet implemented');
@@ -237,24 +270,50 @@ export class TransactionOrchestrator {
 
       logger.info({ transactionId }, 'Transaction completed successfully');
     } catch (error) {
-      logger.error({ transactionId, err: error }, 'Transaction processing failed');
+      const errorDetails = getErrorDetails(error);
+      const retryable = isRetryableError(error);
 
-      // Update status to FAILED
-      await this.repository.updateStatus(transactionId, TransactionStatus.FAILED, {
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      logger.error(
+        {
+          transactionId,
+          err: error,
+          errorType: errorDetails.type,
+          errorCode: errorDetails.code,
+          retryable,
+        },
+        'Transaction processing failed'
+      );
+
+      // Determine final status based on error type
+      // If retryable, keep as PROCESSING (will be retried by worker)
+      // If not retryable, mark as FAILED
+      const finalStatus = retryable ? TransactionStatus.PROCESSING : TransactionStatus.FAILED;
+
+      // Update status
+      await this.repository.updateStatus(transactionId, finalStatus, {
+        errorMessage: errorDetails.message,
       });
 
       // Get updated transaction for webhook
       const failedTransaction = await this.getTransaction(transactionId);
 
-      // Trigger webhook
-      if (this.webhookService) {
-        await this.webhookService.triggerTransactionFailed(
-          failedTransaction,
-          error instanceof Error ? error : new Error('Unknown error')
-        );
+      // Trigger webhook only for non-retryable errors (permanent failures)
+      if (!retryable && this.webhookService) {
+        try {
+          await this.webhookService.triggerTransactionFailed(
+            failedTransaction,
+            error instanceof Error ? error : new Error('Unknown error')
+          );
+        } catch (webhookError) {
+          // Don't fail the transaction if webhook fails
+          logger.error(
+            { transactionId, err: webhookError },
+            'Failed to trigger transaction failed webhook'
+          );
+        }
       }
 
+      // Re-throw error so worker can decide on retry
       throw error;
     }
   }
