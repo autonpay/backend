@@ -84,19 +84,31 @@ transactionQueue.on('error', (error) => {
  * Add transaction to processing queue with dynamic retry configuration
  */
 export async function queueTransaction(data: TransactionJobData): Promise<void> {
-  // Default job options (will be used if error occurs during processing)
-  const defaultOptions: JobsOptions = {
-    jobId: `txn-${data.transactionId}`, // Unique job ID
-    attempts: 3, // Default attempts
-    backoff: {
-      type: 'exponential',
-      delay: 2000, // Start with 2 seconds
-    },
-  };
+  try {
+    // Default job options (will be used if error occurs during processing)
+    const defaultOptions: JobsOptions = {
+      jobId: `txn-${data.transactionId}`, // Unique job ID
+      attempts: 3, // Default attempts
+      backoff: {
+        type: 'exponential',
+        delay: 2000, // Start with 2 seconds
+      },
+    };
 
-  await transactionQueue.add('process-transaction', data, defaultOptions);
+    await transactionQueue.add('process-transaction', data, defaultOptions);
 
-  logger.info({ transactionId: data.transactionId }, 'Transaction queued for processing');
+    logger.info({ transactionId: data.transactionId }, 'Transaction queued for processing');
+  } catch (error) {
+    // If Redis is unavailable, log the error but don't throw
+    // This allows transactions to be created even when Redis is down
+    // The caller (orchestrator) will handle this gracefully
+    logger.error(
+      { transactionId: data.transactionId, err: error },
+      'Failed to add transaction to queue. Transaction will need to be processed manually or when Redis is available.'
+    );
+    // Don't re-throw - let the orchestrator handle it gracefully
+    // This ensures transaction creation succeeds even if queueing fails
+  }
 }
 
 /**
