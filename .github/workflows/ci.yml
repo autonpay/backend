@@ -42,12 +42,33 @@ jobs:
           echo "Waiting for PostgreSQL..."
           for i in {1..10}; do
             if docker exec auton-postgres pg_isready -U auton; then
-              exit 0
+              echo "PostgreSQL is ready"
+              break
             fi
             sleep 3
           done
-          echo "PostgreSQL did not become ready in time" >&2
-          exit 1
+
+          echo "Waiting for Redis..."
+          for i in {1..10}; do
+            if docker exec auton-redis redis-cli ping | grep -q PONG; then
+              echo "Redis is ready"
+              break
+            fi
+            sleep 3
+          done
+
+          # Verify both services are ready
+          if ! docker exec auton-postgres pg_isready -U auton; then
+            echo "PostgreSQL did not become ready in time" >&2
+            exit 1
+          fi
+
+          if ! docker exec auton-redis redis-cli ping | grep -q PONG; then
+            echo "Redis did not become ready in time" >&2
+            exit 1
+          fi
+
+          echo "All services are ready"
 
       - name: Generate Prisma client
         run: npm run db:generate
