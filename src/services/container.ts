@@ -19,6 +19,7 @@ import { BlockchainService } from './blockchain';
 import { WebhookService } from './webhooks';
 import { WebhookRepository } from './webhooks/webhook.repository';
 import { ApprovalService, ApprovalRepository } from './approvals';
+import { MerchantService, MerchantRepository } from './merchants';
 import { config } from '../shared/config';
 import { logger } from '../shared/logger';
 
@@ -43,6 +44,8 @@ class ServiceContainer {
   private _webhookService?: WebhookService;
   private _approvalRepository?: ApprovalRepository;
   private _approvalService?: ApprovalService;
+  private _merchantRepository?: MerchantRepository;
+  private _merchantService?: MerchantService;
   private _transactionOrchestrator?: TransactionOrchestrator;
 
   private constructor() {}
@@ -137,7 +140,13 @@ class ServiceContainer {
 
     if (!this._blockchainService) {
       try {
-        this._blockchainService = new BlockchainService(this.agentService);
+        // Merchant service is optional - blockchain service can work without it
+        // (but merchant payments won't work without merchant service)
+        this._blockchainService = new BlockchainService(
+          this.agentService,
+          undefined,
+          this.merchantService // May be undefined on first access, will be available on subsequent accesses
+        );
       } catch (error) {
         logger.error({ err: error }, 'Failed to initialize BlockchainService. Blockchain operations will be disabled.');
         return undefined;
@@ -192,6 +201,26 @@ class ServiceContainer {
   }
 
   /**
+   * Get Merchant Repository
+   */
+  get merchantRepository(): MerchantRepository {
+    if (!this._merchantRepository) {
+      this._merchantRepository = new MerchantRepository();
+    }
+    return this._merchantRepository;
+  }
+
+  /**
+   * Get Merchant Service
+   */
+  get merchantService(): MerchantService {
+    if (!this._merchantService) {
+      this._merchantService = new MerchantService(this.merchantRepository);
+    }
+    return this._merchantService;
+  }
+
+  /**
    * Get Transaction Orchestrator
    */
   get transactionOrchestrator(): TransactionOrchestrator {
@@ -225,6 +254,8 @@ class ServiceContainer {
     this._webhookService = undefined;
     this._approvalRepository = undefined;
     this._approvalService = undefined;
+    this._merchantRepository = undefined;
+    this._merchantService = undefined;
     this._transactionOrchestrator = undefined;
   }
 }
