@@ -17,16 +17,29 @@ const router = Router();
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath('/admin/queues');
 
-createBullBoard({
-  queues: [
-    new BullMQAdapter(transactionQueue),
-    new BullMQAdapter(deadLetterQueue),
-    new BullMQAdapter(webhookQueue),
-  ],
-  serverAdapter,
-});
+// Only add queues that are available (not null)
+const queues = [];
+if (transactionQueue) {
+  queues.push(new BullMQAdapter(transactionQueue));
+}
+if (deadLetterQueue) {
+  queues.push(new BullMQAdapter(deadLetterQueue));
+}
+if (webhookQueue) {
+  queues.push(new BullMQAdapter(webhookQueue));
+}
 
-router.use('/admin/queues', serverAdapter.getRouter());
+if (queues.length > 0) {
+  createBullBoard({
+    queues,
+    serverAdapter,
+  });
+
+  router.use('/admin/queues', serverAdapter.getRouter());
+  logger.info('Queue dashboard available at /admin/queues');
+} else {
+  logger.warn('No queues available for dashboard (Redis may be unavailable)');
+}
 
 logger.info('Queue dashboard available at /admin/queues');
 
