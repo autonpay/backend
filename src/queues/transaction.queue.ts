@@ -50,41 +50,61 @@ export interface DeadLetterQueueData extends TransactionJobData {
 
 /**
  * Transaction processing queue
+ * Created with error handling to prevent failures when Redis is unavailable
  */
-export const transactionQueue = new Queue<TransactionJobData>('transaction-processing', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3, // Default, will be overridden by dynamic retry logic
-    backoff: {
-      type: 'exponential',
-      delay: 2000, // Start with 2 seconds, then 4s, 8s, etc.
-    },
-    removeOnComplete: {
-      age: 24 * 3600, // Keep completed jobs for 24 hours
-      count: 1000, // Keep last 1000 completed jobs
-    },
-    removeOnFail: {
-      age: 7 * 24 * 3600, // Keep failed jobs for 7 days
-    },
-  },
-});
+let transactionQueue: Queue<TransactionJobData>;
+let deadLetterQueue: Queue<DeadLetterQueueData>;
 
-/**
- * Dead letter queue for permanently failed transactions
- */
-export const deadLetterQueue = new Queue<DeadLetterQueueData>('transaction-dlq', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: {
-      age: 30 * 24 * 3600, // Keep for 30 days
+try {
+  transactionQueue = new Queue<TransactionJobData>('transaction-processing', {
+    connection,
+    defaultJobOptions: {
+      attempts: 3, // Default, will be overridden by dynamic retry logic
+      backoff: {
+        type: 'exponential',
+        delay: 2000, // Start with 2 seconds, then 4s, 8s, etc.
+      },
+      removeOnComplete: {
+        age: 24 * 3600, // Keep completed jobs for 24 hours
+        count: 1000, // Keep last 1000 completed jobs
+      },
+      removeOnFail: {
+        age: 7 * 24 * 3600, // Keep failed jobs for 7 days
+      },
     },
-  },
-});
+  });
 
-// Log queue events
-transactionQueue.on('error', (error) => {
-  logger.error({ err: error }, 'Transaction queue error');
-});
+  /**
+   * Dead letter queue for permanently failed transactions
+   */
+  deadLetterQueue = new Queue<DeadLetterQueueData>('transaction-dlq', {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: {
+        age: 30 * 24 * 3600, // Keep for 30 days
+      },
+    },
+  });
+
+  // Log queue events
+  transactionQueue.on('error', (error) => {
+    logger.warn({ err: error }, 'Transaction queue error (operations may fail)');
+  });
+
+  deadLetterQueue.on('error', (error) => {
+    logger.warn({ err: error }, 'Dead letter queue error (operations may fail)');
+  });
+} catch (error) {
+  // If Queue creation fails (e.g., Redis not available), create a mock queue
+  // This allows the application to start even without Redis
+  logger.warn({ err: error }, 'Failed to create transaction queues. Queue operations will be disabled.');
+
+  // Create a minimal queue-like object that won't throw errors
+  transactionQueue = null as any;
+  deadLetterQueue = null as any;
+}
+
+export { transactionQueue, deadLetterQueue };
 
 /**
  * Add transaction to processing queue with dynamic retry configuration
@@ -93,6 +113,15 @@ transactionQueue.on('error', (error) => {
  * to ensure transaction creation can succeed even when Redis is unavailable.
  */
 export async function queueTransaction(data: TransactionJobData): Promise<void> {
+  // Check if queue is available (might be null if Redis was unavailable at startup)
+  if (!transactionQueue) {
+    logger.warn(
+      { transactionId: data.transactionId },
+      'Transaction queue not available. Transaction created but will need manual processing when Redis is available.'
+    );
+    return;
+  }
+
   try {
     // Default job options (will be used if error occurs during processing)
     const defaultOptions: JobsOptions = {
@@ -116,7 +145,7 @@ export async function queueTransaction(data: TransactionJobData): Promise<void> 
     const errorMessage = error?.message || String(error);
     const errorName = error?.name || 'UnknownError';
 
-    logger.error(
+    logger.warn(
       {
         transactionId: data.transactionId,
         err: error,
@@ -134,18 +163,33 @@ export async function queueTransaction(data: TransactionJobData): Promise<void> 
  * Move failed transaction to dead letter queue
  */
 export async function moveToDeadLetterQueue(data: TransactionJobData, error: unknown): Promise<void> {
-  await deadLetterQueue.add('failed-transaction', {
-    ...data,
-    failedAt: new Date().toISOString(),
-    error: error instanceof Error ? error.message : String(error),
-  }, {
-    jobId: `dlq-${data.transactionId}`,
-  });
+  if (!deadLetterQueue) {
+    logger.warn(
+      { transactionId: data.transactionId, error },
+      'Dead letter queue not available. Failed transaction logged but not queued.'
+    );
+    return;
+  }
 
-  logger.warn(
-    { transactionId: data.transactionId, error },
-    'Transaction moved to dead letter queue'
-  );
+  try {
+    await deadLetterQueue.add('failed-transaction', {
+      ...data,
+      failedAt: new Date().toISOString(),
+      error: error instanceof Error ? error.message : String(error),
+    }, {
+      jobId: `dlq-${data.transactionId}`,
+    });
+
+    logger.warn(
+      { transactionId: data.transactionId, error },
+      'Transaction moved to dead letter queue'
+    );
+  } catch (err) {
+    logger.error(
+      { transactionId: data.transactionId, error, err },
+      'Failed to move transaction to dead letter queue'
+    );
+  }
 }
 
 /**
@@ -157,13 +201,22 @@ export async function getQueueStatus(): Promise<{
   completed: number;
   failed: number;
 }> {
-  const [waiting, active, completed, failed] = await Promise.all([
-    transactionQueue.getWaitingCount(),
-    transactionQueue.getActiveCount(),
-    transactionQueue.getCompletedCount(),
-    transactionQueue.getFailedCount(),
-  ]);
+  if (!transactionQueue) {
+    return { waiting: 0, active: 0, completed: 0, failed: 0 };
+  }
 
-  return { waiting, active, completed, failed };
+  try {
+    const [waiting, active, completed, failed] = await Promise.all([
+      transactionQueue.getWaitingCount(),
+      transactionQueue.getActiveCount(),
+      transactionQueue.getCompletedCount(),
+      transactionQueue.getFailedCount(),
+    ]);
+
+    return { waiting, active, completed, failed };
+  } catch (error) {
+    logger.warn({ err: error }, 'Failed to get queue status');
+    return { waiting: 0, active: 0, completed: 0, failed: 0 };
+  }
 }
 
