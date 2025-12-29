@@ -14,6 +14,7 @@ import { prisma } from '../database/client';
 import { createServer } from '../server';
 import { container } from '../services/container';
 import { MerchantService } from '../services/merchants';
+import { WalletManager } from '../services/blockchain/wallet.manager';
 
 describe('Merchant Integration Tests', () => {
   let app: Application;
@@ -372,6 +373,8 @@ describe('Merchant Integration Tests', () => {
 
       // Use a unique address based on timestamp to avoid conflicts
       const uniqueAddress = `0x${Date.now().toString(16).padEnd(40, '0').slice(0, 40)}`;
+      // Address will be normalized to checksummed format by the service
+      const expectedNormalizedAddress = WalletManager.normalizeAddress(uniqueAddress);
 
       const response = await request(app)
         .patch(`/v1/merchants/${merchant.id}`)
@@ -387,7 +390,7 @@ describe('Merchant Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.name).toBe('Updated Merchant Name');
       expect(response.body.data.category).toBe('Services');
-      expect(response.body.data.walletAddress).toBe(uniqueAddress);
+      expect(response.body.data.walletAddress).toBe(expectedNormalizedAddress);
       expect(response.body.data.verified).toBe(true);
     });
 
