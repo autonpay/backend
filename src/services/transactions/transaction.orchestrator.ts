@@ -99,26 +99,16 @@ export class TransactionOrchestrator {
       logger.info({ transactionId: transaction.id }, 'Transaction requires approval');
     } else {
       // Queue for background processing
-      // Wrap in try-catch to handle Redis connection issues gracefully
-      try {
-        await queueTransaction({
-          transactionId: transaction.id,
-          organizationId: agent.organizationId,
-          agentId: transaction.agentId,
-          amount: transaction.amount,
-          currency: transaction.currency,
-        });
-        logger.info({ transactionId: transaction.id }, 'Transaction queued for processing');
-      } catch (error) {
-        // Log error but don't fail the transaction creation
-        // The transaction is already saved to the database
-        logger.error(
-          { transactionId: transaction.id, err: error },
-          'Failed to queue transaction for processing. Transaction created but may need manual processing.'
-        );
-        // In test environments or when Redis is unavailable, this is acceptable
-        // The transaction worker can pick it up later when Redis is available
-      }
+      // queueTransaction handles errors gracefully and won't throw
+      // Transaction creation will succeed even if Redis is unavailable
+      await queueTransaction({
+        transactionId: transaction.id,
+        organizationId: agent.organizationId,
+        agentId: transaction.agentId,
+        amount: transaction.amount,
+        currency: transaction.currency,
+      });
+      // Note: queueTransaction logs errors internally, so we don't need try-catch here
     }
 
     return transaction;
