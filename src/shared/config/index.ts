@@ -28,8 +28,9 @@ export const config = {
     // Test token address for development/testing (deploy your own ERC20 token)
     testTokenAddress: process.env.TEST_TOKEN_ADDRESS || '',
     // Skip blockchain operations (for testing without blockchain setup)
-    // Set SKIP_BLOCKCHAIN=true in .env to skip blockchain, or it will auto-skip in development
-    skipBlockchain: process.env.SKIP_BLOCKCHAIN === 'true' || (process.env.NODE_ENV || 'development') === 'development',
+    // Set SKIP_BLOCKCHAIN=true in .env to skip blockchain, or it will auto-skip in development/test
+    skipBlockchain: process.env.SKIP_BLOCKCHAIN === 'true' ||
+      ['development', 'test'].includes(process.env.NODE_ENV || 'development'),
   },
 
   // x402
