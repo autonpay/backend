@@ -107,6 +107,25 @@ try {
 export { transactionQueue, deadLetterQueue };
 
 /**
+ * Close all queue connections
+ * Used for graceful shutdown and test cleanup
+ */
+export async function closeTransactionQueues(): Promise<void> {
+  try {
+    if (transactionQueue) {
+      await transactionQueue.close();
+    }
+    if (deadLetterQueue) {
+      await deadLetterQueue.close();
+    }
+    await connection.quit();
+    logger.debug('Transaction queues closed');
+  } catch (error) {
+    logger.warn({ err: error }, 'Error closing transaction queues');
+  }
+}
+
+/**
  * Add transaction to processing queue with dynamic retry configuration
  *
  * This function will not throw errors - it handles Redis connection failures gracefully
