@@ -18,6 +18,7 @@ import { authenticate } from '../middleware/authenticate';
 import { BadRequestError } from '../../shared/errors';
 import { validate } from '../middleware/validate';
 import { AgentStatus } from '../../services/agents';
+import { config } from '../../shared/config';
 import * as responses from '../../shared/http/response';
 
 const router = Router();
@@ -323,6 +324,8 @@ router.delete(
 /**
  * POST /agents/:id/spend
  * Initiate a spend request for an agent
+ *
+ * Requires either toAddress (for direct transfers) or merchantId (for merchant payments via x402)
  */
 const spendSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
@@ -330,8 +333,66 @@ const spendSchema = z.object({
   merchantId: z.string().uuid().optional(),
   merchantName: z.string().optional(),
   category: z.string().optional(),
+  toAddress: z
+    .string()
+    .optional()
+    .transform((val) => {
+      // Transform empty strings to undefined
+      if (val === '' || val === undefined) return undefined;
+
+      // In development, normalize lowercase addresses
+      // This allows testing with addresses like 0x742d35cc6634c0532925a3b844bc9e7595f0beb0
+      if (config.env === 'development' && /^0x[a-f0-9]{40}$/.test(val.toLowerCase())) {
+        try {
+          const { getAddress } = require('viem');
+          return getAddress(val.toLowerCase());
+        } catch {
+          // If normalization fails, return original (will fail validation)
+          return val;
+        }
+      }
+
+      return val;
+    })
+    .refine(
+      (val) => {
+        if (val === undefined) return true;
+
+        // Check format: must be 0x followed by 40 hex characters
+        if (!/^0x[a-fA-F0-9]{40}$/.test(val)) {
+          return false;
+        }
+
+        // In development, be lenient (allow any checksum)
+        // In production, use viem's strict validation
+        if (config.env === 'production') {
+          try {
+            const { isAddress } = require('viem');
+            return isAddress(val);
+          } catch {
+            // Fallback to format check if viem not available
+            return true;
+          }
+        }
+
+        return true;
+      },
+      {
+        message: 'toAddress must be a valid Ethereum address (0x followed by exactly 40 hex characters, total length 42)'
+      }
+    ),
   metadata: z.record(z.any()).optional(),
-});
+}).refine(
+  (data) => {
+    const hasToAddress = data.toAddress && data.toAddress.trim() !== '';
+    const hasMerchantId = data.merchantId && data.merchantId.trim() !== '';
+    return hasToAddress || hasMerchantId;
+  },
+  {
+    message: 'Either toAddress (for direct transfers) or merchantId (for merchant payments) must be provided',
+    path: ['toAddress'],
+  }
+);
 
 router.post(
   '/:id/spend',

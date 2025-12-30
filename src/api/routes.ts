@@ -9,6 +9,9 @@ import organizationRoutes from './routes/organizations.routes';
 import agentRoutes from './routes/agents.routes';
 import rulesRoutes from './routes/rules.routes';
 import transactionRoutes from './routes/transactions.routes';
+import webhookRoutes from './routes/webhooks.routes';
+import approvalRoutes from './routes/approvals.routes';
+import merchantRoutes from './routes/merchants.routes';
 
 export function registerRoutes(app: Application) {
   const v1Router = Router();
@@ -39,8 +42,14 @@ export function registerRoutes(app: Application) {
   // Transaction routes (transaction management)
   v1Router.use('/transactions', transactionRoutes);
 
-  // TODO: Webhook routes
-  // v1Router.use('/webhooks', webhookRoutes);
+  // Webhook routes
+  v1Router.use('/webhooks', webhookRoutes);
+
+  // Approval routes
+  v1Router.use('/approvals', approvalRoutes);
+
+  // Merchant routes
+  v1Router.use('/merchants', merchantRoutes);
 
   // API info endpoint
   v1Router.get('/', (res: Response) => {
@@ -54,6 +63,9 @@ export function registerRoutes(app: Application) {
         agents: '/v1/agents',
         rules: '/v1/rules',
         transactions: '/v1/transactions',
+        webhooks: '/v1/webhooks',
+        approvals: '/v1/approvals',
+        merchants: '/v1/merchants',
       },
     });
   });

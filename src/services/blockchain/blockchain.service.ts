@@ -7,6 +7,7 @@
 
 import { logger } from '../../shared/logger';
 import { BlockchainError } from '../../shared/errors';
+import { config } from '../../shared/config';
 import { Transaction } from '../transactions/transaction.types';
 import { AgentService } from '../agents';
 import { WalletManager } from './wallet.manager';
@@ -22,6 +23,22 @@ import {
   TransactionStatus as BlockchainTxStatus,
 } from './blockchain.types';
 
+/**
+ * Get the blockchain network based on environment
+ * - development/staging: Use Base Sepolia (testnet)
+ * - production: Use Base Mainnet
+ */
+function getNetworkForEnvironment(): BlockchainNetwork {
+  const env = config.env.toLowerCase();
+
+  if (env === 'production') {
+    return BlockchainNetwork.BASE_MAINNET;
+  }
+
+  // Default to testnet for development and staging
+  return BlockchainNetwork.BASE_SEPOLIA;
+}
+
 export class BlockchainService {
   private walletManager: WalletManager;
   private gasEstimator: GasEstimator;
@@ -29,12 +46,21 @@ export class BlockchainService {
   private contractClient: ContractClient;
   private x402Client: X402Client;
   private network: BlockchainNetwork;
+  private merchantService?: any; // MerchantService - using any to avoid circular dependency
 
   constructor(
     private agentService: AgentService,
-    network: BlockchainNetwork = BlockchainNetwork.BASE_MAINNET
+    network?: BlockchainNetwork,
+    merchantService?: any // Optional merchant service for address resolution
   ) {
-    this.network = network;
+    this.merchantService = merchantService;
+    // Use provided network or auto-detect based on environment
+    this.network = network || getNetworkForEnvironment();
+
+    logger.info(
+      { network: this.network, environment: config.env },
+      'Initializing BlockchainService'
+    );
     this.walletManager = new WalletManager(network);
     this.gasEstimator = new GasEstimator(network);
     this.transactionMonitor = new TransactionMonitor(this.gasEstimator.getPublicClient());
@@ -55,17 +81,23 @@ export class BlockchainService {
     try {
       // 1. Resolve agent wallet address
       const agent = await this.agentService.getAgent(transaction.agentId);
-      const agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
+      let agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
 
       if (!agentWalletAddress) {
         throw new BlockchainError('Agent wallet address not found');
       }
 
-      // 2. Determine recipient address
-      const recipientAddress = this.getRecipientAddress(transaction);
-      if (!ContractClient.isValidAddress(recipientAddress)) {
+      // Normalize agent wallet address to checksummed format
+      agentWalletAddress = WalletManager.normalizeAddress(agentWalletAddress);
+
+      // 2. Determine recipient address (async - may need to resolve from merchant)
+      let recipientAddress = await this.getRecipientAddress(transaction);
+      if (!WalletManager.isValidAddress(recipientAddress)) {
         throw new BlockchainError(`Invalid recipient address: ${recipientAddress}`);
       }
+
+      // Normalize recipient address to checksummed format
+      recipientAddress = WalletManager.normalizeAddress(recipientAddress);
 
       // 3. Convert amount to token units (USDC has 6 decimals)
       const tokenAddress = this.contractClient.getUSDCAddress();
@@ -99,16 +131,47 @@ export class BlockchainService {
     amount: bigint,
     tokenAddress: `0x${string}`
   ): Promise<ExecuteSpendResult> {
-    logger.info(
-      {
-        transactionId: transaction.id,
-        from: fromAddress,
-        to: toAddress,
-        amount: amount.toString(),
-        token: tokenAddress,
-      },
-      'Executing direct token transfer'
-    );
+      logger.info(
+        {
+          transactionId: transaction.id,
+          from: fromAddress,
+          to: toAddress,
+          amount: amount.toString(),
+          token: tokenAddress,
+        },
+        'Executing direct token transfer'
+      );
+
+    // Check on-chain balance before attempting transfer
+    // If balance check fails (e.g., contract doesn't exist), log warning but continue
+    // This allows development on networks where USDC might not be deployed
+    try {
+      const onChainBalance = await this.contractClient.getTokenBalance(
+        tokenAddress as `0x${string}`,
+        fromAddress as `0x${string}`
+      );
+
+      if (onChainBalance < amount) {
+        const balanceFormatted = ContractClient.formatTokenAmount(onChainBalance, 6);
+        const amountFormatted = ContractClient.formatTokenAmount(amount, 6);
+        throw new BlockchainError(
+          `Insufficient on-chain balance. Available: ${balanceFormatted} USDC, Required: ${amountFormatted} USDC. ` +
+          `Please fund wallet ${fromAddress} with USDC tokens.`
+        );
+      }
+    } catch (error) {
+      // If balance check fails due to contract not existing, log and continue
+      // This allows testing on networks where the token contract might not be deployed
+      if (error instanceof BlockchainError && error.message.includes('contract not found')) {
+        logger.warn(
+          { tokenAddress, fromAddress, error: error.message },
+          'Token contract not found on network - balance check skipped. Transaction will proceed but may fail.'
+        );
+      } else {
+        // Re-throw if it's a different error (e.g., insufficient balance)
+        throw error;
+      }
+    }
 
     // Estimate gas
     const gasEstimate = await this.estimateGasForTransfer(tokenAddress, toAddress, amount, fromAddress);
@@ -220,7 +283,7 @@ export class BlockchainService {
     try {
       const agent = await this.agentService.getAgent(transaction.agentId);
       const agentWalletAddress = await this.walletManager.resolveAgentWallet(agent.walletAddress);
-      const recipientAddress = this.getRecipientAddress(transaction);
+      const recipientAddress = await this.getRecipientAddress(transaction);
       const tokenAddress = this.contractClient.getUSDCAddress();
       const amount = ContractClient.parseTokenAmount(transaction.amount.toString(), 6);
 
@@ -292,8 +355,8 @@ export class BlockchainService {
   /**
    * Get recipient address from transaction
    */
-  private getRecipientAddress(transaction: Transaction): string {
-    // Priority: toAddress > metadata.recipientAddress > merchantId (for x402)
+  private async getRecipientAddress(transaction: Transaction): Promise<string> {
+    // Priority: toAddress > metadata.recipientAddress > merchantId
     if (transaction.toAddress) {
       return transaction.toAddress;
     }
@@ -302,10 +365,25 @@ export class BlockchainService {
       return transaction.metadata.recipientAddress;
     }
 
-    // For merchant payments, x402 will handle recipient resolution
+    // For merchant payments, resolve wallet address from merchant record
     if (transaction.merchantId) {
-      // Return placeholder - x402 will resolve actual recipient
-      return '0x0000000000000000000000000000000000000000';
+      if (!this.merchantService) {
+        throw new BlockchainError(
+          'Merchant service not available. Cannot resolve merchant wallet address.'
+        );
+      }
+
+      try {
+        const walletAddress = await this.merchantService.getMerchantWalletAddress(
+          transaction.merchantId
+        );
+        return walletAddress;
+      } catch (error) {
+        throw new BlockchainError(
+          `Failed to resolve merchant wallet address: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          { merchantId: transaction.merchantId, error }
+        );
+      }
     }
 
     throw new BlockchainError('Recipient address not specified in transaction');

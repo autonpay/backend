@@ -18,3 +18,14 @@ config();
 //   warn: jest.fn(),
 // };
 
+// Cleanup after all tests complete
+afterAll(async () => {
+  // Close queue connections to prevent Jest from hanging
+  try {
+    const { closeAllQueues } = await import('../queues');
+    await closeAllQueues();
+  } catch (error) {
+    // Ignore errors during cleanup
+  }
+});
+

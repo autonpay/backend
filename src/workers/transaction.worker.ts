@@ -9,6 +9,8 @@ import { config } from '../shared/config';
 import { logger } from '../shared/logger';
 import { container } from '../services/container';
 import { TransactionJobData } from '../queues/transaction.queue';
+import { getErrorDetails, isRetryableError } from '../shared/errors';
+import { moveToDeadLetterQueue } from '../queues/transaction.queue';
 import Redis from 'ioredis';
 
 // Create Redis connection for BullMQ
@@ -30,12 +32,30 @@ async function processTransaction(job: Job<TransactionJobData>): Promise<void> {
 
     logger.info({ jobId: job.id, transactionId }, 'Transaction job completed successfully');
   } catch (error) {
+    const errorDetails = getErrorDetails(error);
+    const retryable = isRetryableError(error);
+    const attemptNumber = job.attemptsMade + 1;
+
     logger.error(
-      { jobId: job.id, transactionId, err: error },
-      'Transaction job processing failed'
+      {
+        jobId: job.id,
+        transactionId,
+        err: error,
+        errorType: errorDetails.type,
+        errorCode: errorDetails.code,
+        retryable,
+        attemptNumber,
+        maxAttempts: job.opts.attempts,
+      },
+      retryable
+        ? 'Transaction job processing failed (will retry)'
+        : 'Transaction job processing failed (non-retryable)'
     );
 
-    // Re-throw to mark job as failed
+    // For non-retryable errors, the orchestrator already marked it as FAILED
+    // No need to update again here - just log it
+
+    // Re-throw to let BullMQ handle retry logic
     throw error;
   }
 }
@@ -61,11 +81,35 @@ transactionWorker.on('completed', (job) => {
   logger.info({ jobId: job.id, transactionId: job.data.transactionId }, 'Worker: Transaction completed');
 });
 
-transactionWorker.on('failed', (job, err) => {
+transactionWorker.on('failed', async (job, err) => {
+  const transactionId = job?.data.transactionId;
+  const retryable = err ? isRetryableError(err) : false;
+  const attemptsMade = job?.attemptsMade || 0;
+  const maxAttempts = job?.opts.attempts || 3;
+
   logger.error(
-    { jobId: job?.id, transactionId: job?.data.transactionId, err },
+    {
+      jobId: job?.id,
+      transactionId,
+      err,
+      retryable,
+      attemptsMade,
+      maxAttempts,
+    },
     'Worker: Transaction failed'
   );
+
+  // If job exhausted all retries or error is non-retryable, move to dead letter queue
+  if (job && (!retryable || attemptsMade >= maxAttempts)) {
+    try {
+      await moveToDeadLetterQueue(job.data, err);
+    } catch (dlqError) {
+      logger.error(
+        { transactionId, err: dlqError },
+        'Failed to move transaction to dead letter queue'
+      );
+    }
+  }
 });
 
 transactionWorker.on('error', (error) => {

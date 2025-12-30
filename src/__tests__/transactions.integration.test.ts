@@ -135,6 +135,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 100,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           merchantName: 'Test Merchant',
           category: 'software',
           metadata: { test: true },
@@ -160,6 +161,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 100,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           metadata: { test: true },
         })
         .expect(402); // 402 Payment Required for insufficient balance
@@ -190,6 +192,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 600,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           metadata: { test: true },
         })
         .expect(403); // 403 Forbidden for rule violation
@@ -224,6 +227,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 500,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           metadata: { test: true },
         })
         .expect(201);
@@ -245,6 +249,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 100,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
         })
         .expect(401);
 
@@ -282,6 +287,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 100,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           metadata: { test: true },
         })
         .expect(201);
@@ -309,13 +315,13 @@ describe('Transaction Integration Tests', () => {
       await request(app)
         .post(`/v1/agents/${agent1.id}/spend`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ amount: 100, metadata: { test: true } })
+        .send({ amount: 100, toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', metadata: { test: true } })
         .expect(201);
 
       await request(app)
         .post(`/v1/agents/${agent2.id}/spend`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ amount: 200, metadata: { test: true } })
+        .send({ amount: 200, toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', metadata: { test: true } })
         .expect(201);
 
       const response = await request(app)
@@ -337,7 +343,7 @@ describe('Transaction Integration Tests', () => {
       await request(app)
         .post(`/v1/agents/${agent.id}/spend`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ amount: 100, metadata: { test: true } })
+        .send({ amount: 100, toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', metadata: { test: true } })
         .expect(201);
 
       const response = await request(app)
@@ -376,6 +382,7 @@ describe('Transaction Integration Tests', () => {
         .send({
           amount: 150,
           currency: 'USD',
+          toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
           merchantName: 'Test Store',
           category: 'retail',
           metadata: { test: true },
@@ -419,7 +426,7 @@ describe('Transaction Integration Tests', () => {
       const createResponse = await request(app)
         .post(`/v1/agents/${aliceAgent.id}/spend`)
         .set('Authorization', `Bearer ${alice.token}`)
-        .send({ amount: 100, metadata: { test: true } })
+        .send({ amount: 100, toAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0', metadata: { test: true } })
         .expect(201);
 
       const transactionId = createResponse.body.data.id;

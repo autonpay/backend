@@ -65,3 +65,5 @@ export class BlockchainError extends AppError {
   }
 }
 
+export * from './error-classifier';
+
