@@ -236,12 +236,20 @@ describe('Approval Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.length).toBeGreaterThanOrEqual(2);
 
+      // Verify the approvals belong to the transactions we created
       const approvalIds = response.body.data.map((a: any) => a.id);
-      const tx1Approval = (
-        await request(app)
-          .get(`/v1/transactions/${tx1.id}/approval`)
-          .set('Authorization', `Bearer ${token}`)
-      ).body.data;
+
+      // Get approval for tx1 - wait a bit if needed for async creation
+      const tx1ApprovalResponse = await request(app)
+        .get(`/v1/transactions/${tx1.id}/approval`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const tx1Approval = tx1ApprovalResponse.body.data;
+
+      // Verify tx1Approval exists and is in the list
+      expect(tx1Approval).toBeDefined();
+      expect(tx1Approval).not.toBeNull();
       expect(approvalIds).toContain(tx1Approval.id);
     });
 
