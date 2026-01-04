@@ -36,7 +36,13 @@ export const config = {
   // x402
   x402: {
     apiKey: process.env.X402_API_KEY || '',
+    apiBaseUrl: process.env.X402_API_BASE_URL || 'https://api.x402.io',
     network: process.env.X402_NETWORK || 'testnet',
+    timeout: parseInt(process.env.X402_TIMEOUT_MS || '30000', 10), // 30 seconds default
+    maxRetries: parseInt(process.env.X402_MAX_RETRIES || '3', 10), // 3 retries default
+    retryDelay: parseInt(process.env.X402_RETRY_DELAY_MS || '1000', 10), // 1 second initial delay
+    pollingInterval: parseInt(process.env.X402_POLLING_INTERVAL_MS || '5000', 10), // 5 seconds default
+    maxPollingAttempts: parseInt(process.env.X402_MAX_POLLING_ATTEMPTS || '60', 10), // 60 attempts = 5 minutes max
   },
 
   // Third-party services
