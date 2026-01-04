@@ -218,9 +218,26 @@ export class BlockchainService {
       recipientAddress,
     });
 
-    // TODO: Sign payment request with agent wallet
-    // For now, use hot wallet signature
-    const signature = '0x'; // Placeholder - will implement signing logic
+    // Sign payment request message
+    // The message includes all payment details to prove authorization
+    const messageToSign = this.createPaymentRequestMessage({
+      intentId: intent.intentId,
+      fromAddress: agentWalletAddress,
+      recipientAddress,
+      amount: amount.toString(),
+      currency: transaction.currency,
+      merchantId: transaction.merchantId!,
+      transactionId: transaction.id,
+    });
+
+    // Sign with hot wallet (for now, until agent wallets are fully implemented)
+    // TODO: When agent wallets are deployed, sign with agent wallet private key
+    const signature = await this.walletManager.signMessage(messageToSign);
+
+    logger.debug(
+      { intentId: intent.intentId, fromAddress: agentWalletAddress },
+      'Payment request message signed'
+    );
 
     // Submit payment request
     const paymentRequest = await this.x402Client.submitPaymentRequest({
@@ -236,6 +253,34 @@ export class BlockchainService {
       estimatedGas: BigInt(0), // x402 handles gas
       gasPrice: BigInt(0),
     };
+  }
+
+  /**
+   * Create payment request message for signing
+   * This message proves the agent authorized the payment
+   */
+  private createPaymentRequestMessage(params: {
+    intentId: string;
+    fromAddress: string;
+    recipientAddress: string;
+    amount: string;
+    currency: string;
+    merchantId: string;
+    transactionId: string;
+  }): string {
+    // Create a structured message that includes all payment details
+    // This follows a standard format for payment authorization signatures
+    return JSON.stringify({
+      intentId: params.intentId,
+      fromAddress: params.fromAddress,
+      recipientAddress: params.recipientAddress,
+      amount: params.amount,
+      currency: params.currency,
+      merchantId: params.merchantId,
+      transactionId: params.transactionId,
+      network: this.network,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
