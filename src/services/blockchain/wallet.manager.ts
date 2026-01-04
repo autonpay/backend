@@ -144,5 +144,58 @@ export class WalletManager {
   static isValidPrivateKey(privateKey: string): boolean {
     return /^0x[a-fA-F0-9]{64}$/.test(privateKey);
   }
+
+  /**
+   * Sign a message with the hot wallet
+   * Used for x402 payment request signing
+   */
+  async signMessage(message: string): Promise<`0x${string}`> {
+    if (!this.walletClient || !this.hotWallet) {
+      throw new BlockchainError('Wallet client not initialized');
+    }
+
+    try {
+      // Use walletClient.signMessage which is available on WalletClient
+      const signature = await this.walletClient.signMessage({
+        account: this.hotWallet,
+        message,
+      });
+
+      logger.debug({ message, signature }, 'Message signed with hot wallet');
+      return signature;
+    } catch (error) {
+      logger.error({ err: error, message }, 'Failed to sign message');
+      throw new BlockchainError(
+        `Failed to sign message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        { error }
+      );
+    }
+  }
+
+  /**
+   * Sign a message with a specific account (for agent wallets)
+   * This will be used when we have agent wallet private keys
+   */
+  async signMessageWithAccount(account: PrivateKeyAccount, message: string): Promise<`0x${string}`> {
+    if (!this.walletClient) {
+      throw new BlockchainError('Wallet client not initialized');
+    }
+
+    try {
+      const signature = await this.walletClient.signMessage({
+        account,
+        message,
+      });
+
+      logger.debug({ account: account.address, message, signature }, 'Message signed with account');
+      return signature;
+    } catch (error) {
+      logger.error({ err: error, account: account.address, message }, 'Failed to sign message with account');
+      throw new BlockchainError(
+        `Failed to sign message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        { error }
+      );
+    }
+  }
 }
 
