@@ -34,7 +34,7 @@ export class RulesRepository {
       orderBy: { priority: 'asc' },
     });
 
-    return rules.map(rule => this.mapToSpendingRule(rule));
+    return rules.map((rule: any) => this.mapToSpendingRule(rule));
   }
 
   /**
@@ -53,7 +53,7 @@ export class RulesRepository {
       orderBy: { priority: 'asc' },
     });
 
-    return rules.map(rule => this.mapToSpendingRule(rule));
+    return rules.map((rule: any) => this.mapToSpendingRule(rule));
   }
 
   /**

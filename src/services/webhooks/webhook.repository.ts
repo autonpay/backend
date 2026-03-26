@@ -35,7 +35,7 @@ export class WebhookRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return webhooks.map(webhook => this.mapToWebhook(webhook));
+    return webhooks.map((webhook: any) => this.mapToWebhook(webhook));
   }
 
   /**
@@ -52,7 +52,7 @@ export class WebhookRepository {
       },
     });
 
-    return webhooks.map(webhook => this.mapToWebhook(webhook));
+    return webhooks.map((webhook: any) => this.mapToWebhook(webhook));
   }
 
   /**

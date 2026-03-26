@@ -66,7 +66,7 @@ export class TransactionRepository {
       skip: query.offset || 0,
     });
 
-    return transactions.map(tx => this.mapToTransaction(tx));
+    return transactions.map((tx: any) => this.mapToTransaction(tx));
   }
 
   /**

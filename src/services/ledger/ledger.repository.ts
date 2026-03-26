@@ -45,7 +45,7 @@ export class LedgerRepository {
       take: limit,
     });
 
-    return entries.map(entry => this.mapToLedgerEntry(entry));
+    return entries.map((entry: any) => this.mapToLedgerEntry(entry));
   }
 
   /**

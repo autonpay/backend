@@ -54,7 +54,7 @@ export class OrganizationRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return orgs.map(org => this.mapToOrganization(org));
+    return orgs.map((org: any) => this.mapToOrganization(org));
   }
 
   /**

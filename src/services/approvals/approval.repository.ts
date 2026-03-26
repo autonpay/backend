@@ -135,7 +135,7 @@ export class ApprovalRepository {
       },
     });
 
-    return approvals.map((approval) => this.mapToApproval(approval));
+    return approvals.map((approval: any) => this.mapToApproval(approval));
   }
 
   /**
@@ -293,7 +293,7 @@ export class ApprovalRepository {
       },
     });
 
-    return approvals.map((approval) => this.mapToApproval(approval));
+    return approvals.map((approval: any) => this.mapToApproval(approval));
   }
 
   /**

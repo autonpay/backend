@@ -76,7 +76,7 @@ export class UserRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map(user => this.mapToUser(user));
+    return users.map((user: any) => this.mapToUser(user));
   }
 
   /**
@@ -93,7 +93,7 @@ export class UserRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map(user => this.mapToUser(user));
+    return users.map((user: any) => this.mapToUser(user));
   }
 
   /**

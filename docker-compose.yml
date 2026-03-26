@@ -1,6 +1,41 @@
-version: '3.8'
-
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auton-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://auton:dev_password_change_in_production@postgres:5432/auton_dev?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # One-shot schema migration runner (run manually when needed).
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auton-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://auton:dev_password_change_in_production@postgres:5432/auton_dev?schema=public}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+    profiles:
+      - tools
+
+  # Infrastructure services used by the backend.
   postgres:
     image: postgres:16-alpine
     container_name: auton-postgres

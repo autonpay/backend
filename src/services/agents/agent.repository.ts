@@ -42,7 +42,7 @@ export class AgentRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return agents.map(agent => this.mapToAgent(agent));
+    return agents.map((agent: any) => this.mapToAgent(agent));
   }
 
   /**

@@ -17,8 +17,9 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx src/database/seed.ts",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:migrate": "docker compose --profile tools run --rm migrate"
   },
   "keywords": [
     "ai",

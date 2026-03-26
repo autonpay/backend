@@ -76,7 +76,7 @@ export class MerchantRepository {
       },
     });
 
-    return merchants.map((merchant) => this.mapToMerchant(merchant));
+    return merchants.map((merchant: any) => this.mapToMerchant(merchant));
   }
 
   /**
