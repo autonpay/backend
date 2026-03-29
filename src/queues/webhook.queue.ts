@@ -11,10 +11,12 @@ import Redis from 'ioredis';
 
 // Create Redis connection for BullMQ
 // Use lazyConnect to avoid immediate connection attempts
+const isTls = config.redisUrl.startsWith('rediss://');
 const connection = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
   lazyConnect: true, // Don't connect immediately
   enableReadyCheck: false, // Don't wait for ready state
+  tls: isTls ? { rejectUnauthorized: false } : undefined,
   retryStrategy: (times) => {
     // Retry with exponential backoff, max 3 seconds
     const delay = Math.min(times * 50, 3000);
