@@ -273,7 +273,12 @@ router.get('/me', authenticate, async (req: Request, res: Response, next: NextFu
   try {
     if (req.user) {
       const user = await container.userService.getUser(req.user.id);
-      return responses.ok(res, user);
+      return responses.ok(res, {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+      });
     }
 
     if (req.apiKey) {
