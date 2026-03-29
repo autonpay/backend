@@ -19,6 +19,11 @@ export const prisma = global.prisma || new PrismaClient({
     { level: 'error', emit: 'event' },
     { level: 'warn', emit: 'event' },
   ],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
 });
 
 // Log queries in development
