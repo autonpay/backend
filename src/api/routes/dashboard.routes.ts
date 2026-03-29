@@ -43,7 +43,11 @@ router.use(authenticate);
  */
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
+
+    if (!organizationId) {
+      return next(new Error('Organization ID is required'));
+    }
 
     // Get organization stats
     const stats = await container.organizationService.getOrganizationStats(organizationId);
@@ -78,7 +82,7 @@ router.get(
   validate({ query: activityQuerySchema }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const organizationId = req.user!.organizationId;
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
       const { limit } = req.query as { limit?: number };
       const activityLimit = limit ?? 20;
 
@@ -105,7 +109,7 @@ router.get(
   validate({ query: analyticsQuerySchema }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const organizationId = req.user!.organizationId;
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
       const { startDate, endDate, granularity } = req.query as {
         startDate?: Date;
         endDate?: Date;
