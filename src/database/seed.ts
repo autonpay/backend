@@ -53,7 +53,7 @@ async function seed() {
 
     // 2. Create Users
     logger.info('👤 Creating users...');
-    const passwordHash = await bcrypt.hash('password123', 10);
+    const passwordHash = await bcrypt.hash('Test1234!', 10);
 
     const user1 = await prisma.user.create({
       data: {
@@ -378,8 +378,13 @@ async function seed() {
     logger.info(`  - Transactions: 3`);
     logger.info('');
     logger.info('🔐 Test Credentials:');
-    logger.info(`  Email: founder@acme.ai`);
-    logger.info(`  Password: password123`);
+    logger.info(`  Email:    founder@acme.ai`);
+    logger.info(`  Password: Test1234!`);
+    logger.info(`  Role:     owner`);
+    logger.info('');
+    logger.info(`  Email:    admin@acme.ai`);
+    logger.info(`  Password: Test1234!`);
+    logger.info(`  Role:     admin`);
 
   } catch (error) {
     logger.error({ err: error }, '❌ Seed failed');
