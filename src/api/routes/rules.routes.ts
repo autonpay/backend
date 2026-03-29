@@ -206,6 +206,30 @@ router.post(
  *         description: Rule not found
  */
 router.get(
+  '/agent/:agentId',
+  validate({ params: agentIdParamsSchema }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { agentId } = req.params as { agentId: string };
+      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
+
+      if (!organizationId) {
+        throw new BadRequestError('Organization ID is required');
+      }
+
+      // Verify agent ownership
+      await container.agentService.verifyOwnership(agentId, organizationId);
+
+      const rules = await container.rulesService.getRulesForAgent(agentId);
+
+      return responses.ok(res, rules, 'Rules retrieved successfully');
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+router.get(
   '/:id',
   validate({ params: ruleIdParamsSchema }),
   async (req: Request, res: Response, next: NextFunction) => {
@@ -348,54 +372,6 @@ router.delete(
       await container.rulesService.deleteRule(id);
 
       return responses.ok(res, null, 'Rule deleted successfully');
-    } catch (error) {
-      return next(error);
-    }
-  }
-);
-
-/**
- * @swagger
- * /v1/rules/agent/{agentId}:
- *   get:
- *     summary: Get rules for specific agent
- *     tags: [Rules]
- *     security:
- *       - bearerAuth: []
- *       - apiKey: []
- *     parameters:
- *       - in: path
- *         name: agentId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: List of rules for agent
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Agent not found
- */
-router.get(
-  '/agent/:agentId',
-  validate({ params: agentIdParamsSchema }),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { agentId } = req.params as { agentId: string };
-      const organizationId = req.user?.organizationId || req.apiKey?.organizationId;
-
-      if (!organizationId) {
-        throw new BadRequestError('Organization ID is required');
-      }
-
-      // Verify agent ownership
-      await container.agentService.verifyOwnership(agentId, organizationId);
-
-      const rules = await container.rulesService.getRulesForAgent(agentId);
-
-      return responses.ok(res, rules, 'Rules retrieved successfully');
     } catch (error) {
       return next(error);
     }
