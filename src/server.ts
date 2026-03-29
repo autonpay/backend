@@ -9,9 +9,18 @@ import { requestLogger } from './api/middleware/request-logger';
 import { registerRoutes } from './api/routes';
 import { swaggerSpec } from './api/swagger';
 import queueDashboardRoutes from './api/routes/queue-dashboard.routes';
+import { prisma } from './database/client';
 
 export async function createServer(): Promise<Application> {
   const app = express();
+
+  // Warm up database connection on startup
+  try {
+    await prisma.$connect();
+    logger.info('✅ Database connected');
+  } catch (error) {
+    logger.warn({ err: error }, 'Database connection warmup failed — will retry on first request');
+  }
 
   // Security middleware
   app.use(helmet());
